@@ -39,6 +39,7 @@ CB.app = (function () {
     CB.register.render();
     CB.lists.render();
     CB.forms.refreshAccounts();
+    if (CB.reconcileUI) CB.reconcileUI.render();   // keep the Reconcile window's totals current
   };
 
   // Save, redraw, and optionally show a status message

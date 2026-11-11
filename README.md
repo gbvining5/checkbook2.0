@@ -6,7 +6,8 @@ A simple check register that runs in any web browser, styled like Windows 7 / ol
 - **Write Check / Payment** — check #, date, payee, amount (written out in words), memo, transaction type (Check, Debit Card, ACH, Bank Fee)
 - **Make Deposit** — received from, amount, memo
 - **Split transactions** — spread one check or deposit across several accounts
-- **Register** — running balance, click any row to edit, **Rec.** checkbox for cleared items, search box
+- **Register** — running balance, click any row to edit, **Rec.** column (**c** = cleared, **R** = reconciled), search box
+- **Reconcile** — once a month, tick items against the bank statement until the difference is $0.00, then lock them
 - **Accounts & Payees** — expense accounts, income accounts, payee addresses
 - **Backup / Open** (.json), **Export to Excel** (.csv), **Print** register
 

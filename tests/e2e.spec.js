@@ -139,3 +139,211 @@ test('windows: minimize, restore, maximize, close, reopen', async ({ page }) => 
   await page.dblclick('.dicon[data-open=checkbook]');
   await expect(win).not.toHaveClass(/closed/);
 });
+
+/* ---------------- Reconcile ---------------- */
+const savedBook = page => page.evaluate(() => JSON.parse(localStorage.getItem('checkbook.v1')));
+
+async function openReconcile(page) {
+  await page.click('.toolbar [data-cmd=reconcile]');
+  await expect(page.locator('#win-reconcile')).not.toHaveClass(/closed/);
+}
+async function startStatement(page, date, ending) {
+  await page.fill('#rc-date', date);
+  await page.fill('#rc-ending', ending);
+  await page.click('#rc-next');
+  await expect(page.locator('#rc-step2')).toBeVisible();
+}
+
+test('reconcile: off by $15 until a $15 bank fee is added, then Finish locks the items as R', async ({ page }) => {
+  const errors = await open(page);
+  await openReconcile(page);
+  await expect(page.locator('#rc-opening')).toHaveValue('$900,000.00');   // beginning balance, first time
+  await expect(page.locator('#rc-opening')).toHaveAttribute('readonly', '');
+  await startStatement(page, '2026-11-30', '899,985.00');
+
+  await expect(page.locator('#rc-pay tbody tr[data-id]')).toHaveCount(1);
+  await expect(page.locator('#rc-dep tbody tr[data-id]')).toHaveCount(1);
+  await page.click('[data-mark=payment][data-on="1"]');
+  await page.click('[data-mark=deposit][data-on="1"]');
+  await expect(page.locator('#rc-t-stmt')).toHaveText('$899,985.00');
+  await expect(page.locator('#rc-t-cleared')).toHaveText('$900,000.00');
+  await expect(page.locator('#rc-t-diff')).toHaveText('-$15.00');
+  await expect(page.locator('#rc-finish')).toBeDisabled();
+
+  // the missing item goes through the same checks as Write Check: an Account is required
+  await page.click('#rc-add');
+  await page.fill('#rc-m-payee', 'First Bank');
+  await page.fill('#rc-m-amount', '15');
+  await page.selectOption('#rc-m-account', '');
+  await page.click('#rc-m-add');
+  await expect(page.locator('#dlg-body')).toContainText('Choose an account');
+  await page.click('#dlg-buttons button');
+  expect((await savedBook(page)).transactions).toHaveLength(2);           // nothing was added
+  await page.selectOption('#rc-m-account', 'Bank Fees');
+  await page.click('#rc-m-add');
+
+  await expect(page.locator('#rc-pay tbody tr.ticked')).toHaveCount(2);  // arrived already ticked
+  await expect(page.locator('#rc-t-diff')).toHaveText('$0.00');
+  await expect(page.locator('#rc-finish')).toBeEnabled();
+  await page.click('#rc-finish');
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+
+  await expect(page.locator('#register .rec-r')).toHaveCount(3);
+  await expect(page.locator('#register .rec-r').first()).toHaveText('R');
+  await expect(page.locator('#register .rec-box')).toHaveCount(0);       // R is not clickable
+  await expect(page.locator('#sb-cleared')).toHaveText('$899,985.00');
+  await expect(page.locator('#sb-current')).toHaveText('$899,985.00');
+
+  const saved = await savedBook(page);
+  expect(saved.version).toBe(3);
+  expect(saved.reconciliations).toHaveLength(1);
+  expect(saved.reconciliations[0]).toMatchObject({ statementDate: '2026-11-30', openingBalance: 90000000, endingBalance: 89998500 });
+  expect(saved.reconciliations[0].transactionIds).toHaveLength(3);
+  expect(saved.transactions.every(t => t.reconciledId === saved.reconciliations[0].id && t.cleared)).toBe(true);
+  expect(saved.reconcileDraft).toBeNull();
+
+  // next statement starts from this one's ending balance
+  await openReconcile(page);
+  await expect(page.locator('#rc-opening')).toHaveValue('$899,985.00');
+  expect(errors).toEqual([]);
+});
+
+test('reconcile: Cancel changes nothing', async ({ page }) => {
+  await open(page);
+  const before = await savedBook(page);
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '900000');
+  await page.click('#rc-pay tbody tr[data-id] .rc-tick');
+  await expect(page.locator('#rc-t-diff')).toHaveText('$150.00');
+  await page.click('#rc-step2 .js-rc-cancel');
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+  expect(await savedBook(page)).toEqual(before);
+  await expect(page.locator('#register .rec-r')).toHaveCount(0);
+  await openReconcile(page);                                             // starts fresh
+  await expect(page.locator('#rc-step1')).toBeVisible();
+  await expect(page.locator('#rc-date')).toHaveValue('');
+});
+
+test('reconcile: Leave Unfinished survives a reload; Cancel keeps the saved session; Start Over discards it', async ({ page }) => {
+  await open(page);
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '900000');
+  await page.click('#rc-dep tbody tr[data-id] .rc-tick');
+  await page.click('#rc-leave');
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+  let saved = await savedBook(page);
+  expect(saved.reconcileDraft).toMatchObject({ statementDate: '2026-11-30', endingBalance: 90000000 });
+  expect(saved.reconcileDraft.tickedIds).toHaveLength(1);
+  expect(saved.transactions.every(t => t.reconciledId === null && t.cleared === false)).toBe(true);   // no transaction changed
+
+  await page.reload();
+  await openReconcile(page);
+  await expect(page.locator('#rc-step2')).toBeVisible();
+  await expect(page.locator('#rc-dep tbody tr.ticked')).toHaveCount(1);
+  await expect(page.locator('#rc-t-diff')).toHaveText('-$150.00');
+
+  // tick something more, then Cancel: back to the saved session (not to nothing)
+  await page.click('#rc-pay tbody tr[data-id] .rc-tick');
+  await page.click('#rc-step2 .js-rc-cancel');
+  expect((await savedBook(page)).reconcileDraft.tickedIds).toHaveLength(1);
+  await openReconcile(page);
+  await expect(page.locator('#rc-pay tbody tr.ticked')).toHaveCount(0);
+  await expect(page.locator('#rc-dep tbody tr.ticked')).toHaveCount(1);
+
+  // Start Over asks first, then throws the saved session away
+  await page.click('#rc-back');
+  await expect(page.locator('#rc-draft-note')).toBeVisible();
+  await page.click('#rc-startover');
+  await expect(page.locator('#dlg-body')).toContainText('Throw away');
+  await page.click('#dlg-buttons .btn.default');
+  expect((await savedBook(page)).reconcileDraft).toBeNull();
+  await expect(page.locator('#rc-date')).toHaveValue('');
+  await expect(page.locator('#rc-startover')).toBeHidden();
+});
+
+test('reconcile: closing with the X while items are ticked asks Leave Unfinished / Discard / Cancel', async ({ page }) => {
+  await open(page);
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '900000');
+  await page.click('#rc-pay tbody tr[data-id] .rc-tick');
+
+  await page.click('#win-reconcile .cap-close');
+  await expect(page.locator('#dlg-buttons button')).toHaveText(['Leave Unfinished', 'Discard', 'Cancel']);
+  await page.click('#dlg-buttons button:has-text("Cancel")');
+  await expect(page.locator('#win-reconcile')).not.toHaveClass(/closed/);
+  await expect(page.locator('#rc-pay tbody tr.ticked')).toHaveCount(1);
+
+  await page.click('#win-reconcile .cap-close');
+  await page.click('#dlg-buttons button:has-text("Discard")');
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+  expect((await savedBook(page)).reconcileDraft).toBeNull();
+
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '900000');
+  await page.click('#rc-pay tbody tr[data-id] .rc-tick');
+  await page.click('#win-reconcile .cap-close');
+  await page.click('#dlg-buttons button:has-text("Leave Unfinished")');
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+  expect((await savedBook(page)).reconcileDraft.tickedIds).toHaveLength(1);
+
+  // nothing new since it was opened: the X just closes
+  await openReconcile(page);
+  await page.click('#win-reconcile .cap-close');
+  await expect(page.locator('#overlay')).toBeHidden();
+  await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
+});
+
+test('a version-2 backup file still opens (cleared ticks kept as "c")', async ({ page }) => {
+  await open(page);
+  const v2 = {
+    version: 2,
+    settings: { company: 'V2 Backup Co', bankAccount: '', beginningBalance: 50000 },
+    expenseAccounts: ['Maint.', 'Bank Fees'], incomeAccounts: ['Sales'], payees: [{ name: 'Carwash', address: '', city: '' }],
+    transactions: [
+      { id: 'x1', seq: 1, kind: 'payment', type: 'Check', number: '7', date: '2025-05-01', payee: 'Carwash', amount: 2500, memo: '',
+        cleared: true, splits: [{ account: 'Maint.', amount: 2500, memo: '', payee: 'Carwash' }] },
+      { id: 'x2', seq: 2, kind: 'deposit', type: 'Deposit', number: '', date: '2025-05-03', payee: 'ABC', amount: 10000, memo: '',
+        cleared: false, splits: [{ account: 'Sales', amount: 10000, memo: '', payee: 'ABC' }] }
+    ]
+  };
+  const file = path.join(os.tmpdir(), 'cb-v2-backup.json');
+  fs.writeFileSync(file, JSON.stringify(v2));
+  await page.setInputFiles('#file-open', file);
+  await page.click('#dlg-buttons .btn.default'); // Replace
+  await expect(page.locator('#sb-current')).toHaveText('$575.00');
+  await expect(page.locator('#sb-cleared')).toHaveText('$475.00');
+  await expect(page.locator('#register .rec-box')).toHaveText(['c', '']);
+
+  const saved = await savedBook(page);
+  expect(saved.version).toBe(3);
+  expect(saved.reconciliations).toEqual([]);
+  expect(saved.reconcileDraft).toBeNull();
+  expect(saved.transactions.map(t => [t.cleared, t.reconciledId])).toEqual([[true, null], [false, null]]);
+
+  // clicking Rec. toggles "c"
+  await page.click('#register tbody:nth-of-type(2) .rec-box');
+  await expect(page.locator('#register .rec-box')).toHaveText(['c', 'c']);
+  await expect(page.locator('#sb-cleared')).toHaveText('$575.00');
+  await page.click('#register tbody:nth-of-type(2) .rec-box');
+
+  // first reconcile of this book: opening = beginning balance; the cleared check starts ticked
+  await openReconcile(page);
+  await expect(page.locator('#rc-opening')).toHaveValue('$500.00');
+  await startStatement(page, '2025-05-31', '475');
+  await expect(page.locator('#rc-pay tbody tr.ticked')).toHaveCount(1);
+  await expect(page.locator('#rc-dep tbody tr.ticked')).toHaveCount(0);
+  await expect(page.locator('#rc-t-diff')).toHaveText('$0.00');
+});
+
+// Bug fix: with two blank account lines, both were skipped and a check with NO account was recorded.
+test('a check whose account lines are all blank is refused', async ({ page }) => {
+  await open(page);
+  await page.click('#p-addsplit');
+  await page.fill('#p-payee', 'Shell');
+  await page.fill('#p-amount', '40');
+  await page.click('#page-check .js-record');
+  await expect(page.locator('#dlg-body')).toContainText('Choose an account');
+  await page.click('#dlg-buttons button');
+  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  expect((await savedBook(page)).transactions).toHaveLength(2);
+});

@@ -7,6 +7,7 @@
 <link rel="icon" href="icons/checkbook.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/checkbook.css">
 <link rel="stylesheet" href="css/desktop.css">
+<link rel="stylesheet" href="css/reconcile.css">
 </head>
 <body>
 
@@ -16,6 +17,9 @@
   <div class="desktop-icons" id="desktop-icons">
     <button class="dicon" data-open="checkbook" title="Open CheckBook">
       <img src="icons/checkbook.svg" alt=""><span>CheckBook</span>
+    </button>
+    <button class="dicon" data-open="reconcile" title="Open Reconcile">
+      <img src="icons/reconcile.svg" alt=""><span>Reconcile</span>
     </button>
     <button class="dicon" data-open="help" title="Open How to Use">
       <img src="icons/help.svg" alt=""><span>How to Use</span>
@@ -53,6 +57,8 @@
         <button data-cmd="deposit">Make Deposit</button>
         <hr>
         <button data-cmd="delete">Delete Selected Transaction</button>
+        <hr>
+        <button data-cmd="reconcile">Reconcile&hellip;</button>
       </div>
     </div>
     <div class="menu">
@@ -76,6 +82,7 @@
     <button class="tb" data-cmd="check"><span class="ico ico-check"></span>Write Check</button>
     <button class="tb" data-cmd="deposit"><span class="ico ico-dep"></span>Make Deposit</button>
     <button class="tb" data-cmd="delete"><span class="ico ico-del"></span>Delete</button>
+    <button class="tb" data-cmd="reconcile"><span class="ico ico-rec"></span>Reconcile&hellip;</button>
     <span class="tb-sep"></span>
     <button class="tb" data-cmd="save"><span class="ico ico-save"></span>Save Backup</button>
     <button class="tb" data-cmd="open"><span class="ico ico-open"></span>Open Backup</button>
@@ -119,7 +126,7 @@
         </table>
         <div class="empty" id="empty-msg" hidden>No transactions yet. Click <b>Write Check</b> or <b>Make Deposit</b> to add one.</div>
       </div>
-      <div class="pane-hint">Click a transaction to view or edit it. Tick <b>Rec.</b> when it clears the bank.</div>
+      <div class="pane-hint">Click a transaction to view or edit it. Click <b>Rec.</b> to mark it <b>c</b> (cleared the bank). <b>R</b> = reconciled.</div>
     </section>
 
     <!-- Forms -->
@@ -321,7 +328,9 @@
       <li><b>Write Check:</b> fill in who you paid, the amount, and pick the expense account, then click <b>Record</b>.
         To split one check across several accounts, click <b>+ Add Line</b>.</li>
       <li><b>Make Deposit:</b> same idea for money coming in.</li>
-      <li><b>Register:</b> click any transaction to edit it. Tick <b>Rec.</b> when it shows on your bank statement.</li>
+      <li><b>Register:</b> click any transaction to edit it. Click its <b>Rec.</b> box to mark it <b>c</b> (cleared) when it shows on your bank statement.</li>
+      <li><b>Reconcile&hellip;</b> (once a month): enter the statement&rsquo;s ending date and balance, tick every item on the statement
+        until the difference is $0.00, then click <b>Finish</b>. Those items are locked and show <b>R</b> in the register.</li>
     </ol>
     <h2>Windows</h2>
     <ul>
@@ -339,6 +348,126 @@
   </div>
 </div>
 
+<!-- ===================== RECONCILE WINDOW ===================== -->
+<div class="window" id="win-reconcile" data-app="reconcile" data-title="Reconcile" data-icon="icons/reconcile.svg" data-minw="480" data-minh="420">
+  <div class="titlebar">
+    <img class="titlebar-img" src="icons/reconcile.svg" alt="">
+    <span class="titlebar-text">Reconcile with Bank Statement</span>
+    <div class="caption-buttons">
+      <button class="cap cap-min" title="Minimize">&#8211;</button><button class="cap cap-max" title="Maximize">&#9633;</button><button class="cap cap-close" title="Close">&#10005;</button>
+    </div>
+  </div>
+  <div class="rc-body">
+
+    <!-- Step 1: the statement -->
+    <div class="rc-step" id="rc-step1">
+      <div class="rc-scroll">
+        <p class="note">Once a month, check your register against your bank statement.
+          Enter the numbers from the statement, then tick each item that appears on it until the difference is $0.00.</p>
+        <fieldset class="group">
+          <legend>Step 1: Your bank statement</legend>
+          <div class="settings-grid">
+            <label for="rc-opening">Opening balance</label>
+            <input id="rc-opening" class="rc-readonly" readonly tabindex="-1" title="Filled in for you: the last statement's ending balance (or the beginning balance the first time)">
+            <label for="rc-date">Statement ending date</label><input id="rc-date" type="date">
+            <label for="rc-ending">Statement ending balance $</label><input id="rc-ending" class="money" inputmode="decimal" placeholder="0.00">
+          </div>
+          <p class="rc-sub" id="rc-last"></p>
+        </fieldset>
+        <div class="edit-banner" id="rc-draft-note" hidden>You have an unfinished reconciliation saved.
+          Click <b>Next</b> to continue it, or <b>Start Over</b> to throw it away.</div>
+      </div>
+      <div class="rc-foot">
+        <button type="button" class="btn" id="rc-startover" hidden>Start Over&hellip;</button>
+        <span class="rc-grow"></span>
+        <button type="button" class="btn default" id="rc-next">Next &gt;</button>
+        <button type="button" class="btn js-rc-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Step 2: tick items -->
+    <div class="rc-step" id="rc-step2" hidden>
+      <div class="rc-head">
+        <b id="rc-stmt-info"></b>
+        <label><input type="checkbox" id="rc-later"> Show later dates too</label>
+      </div>
+      <div class="rc-scroll">
+        <div class="rc-lists">
+          <fieldset class="group">
+            <legend>Payments <span class="rc-count" id="rc-pay-count"></span></legend>
+            <div class="rc-tablewrap">
+              <table class="rc-table" id="rc-pay">
+                <thead><tr><th class="c-tick"></th><th class="c-date">Date</th><th class="c-num">Number</th><th>Payee</th><th class="c-amt">Amount</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="btn-row">
+              <button type="button" class="btn small" data-mark="payment" data-on="1">Mark All</button>
+              <button type="button" class="btn small" data-mark="payment" data-on="0">Unmark All</button>
+            </div>
+          </fieldset>
+          <fieldset class="group">
+            <legend>Deposits <span class="rc-count" id="rc-dep-count"></span></legend>
+            <div class="rc-tablewrap">
+              <table class="rc-table" id="rc-dep">
+                <thead><tr><th class="c-tick"></th><th class="c-date">Date</th><th class="c-num">Number</th><th>Received From</th><th class="c-amt">Amount</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="btn-row">
+              <button type="button" class="btn small" data-mark="deposit" data-on="1">Mark All</button>
+              <button type="button" class="btn small" data-mark="deposit" data-on="0">Unmark All</button>
+            </div>
+          </fieldset>
+        </div>
+
+        <fieldset class="group rc-missing" id="rc-missing" hidden>
+          <legend>Add an item from the statement</legend>
+          <div class="row">
+            <label>Item
+              <select id="rc-m-kind">
+                <option value="fee">Bank fee</option>
+                <option value="interest">Interest earned</option>
+                <option value="payment">Other payment</option>
+                <option value="deposit">Other deposit</option>
+              </select>
+            </label>
+            <label>Date <input id="rc-m-date" type="date"></label>
+          </div>
+          <div class="row">
+            <label class="grow"><span id="rc-m-payee-label">Paid to</span> <input id="rc-m-payee" list="payee-list" placeholder="e.g. your bank"></label>
+            <label>Amount $ <input id="rc-m-amount" class="w-amt money" inputmode="decimal" placeholder="0.00"></label>
+          </div>
+          <div class="row">
+            <label>Account <select id="rc-m-account"></select></label>
+            <label class="grow">Memo <input id="rc-m-memo"></label>
+          </div>
+          <div class="form-buttons">
+            <button type="button" class="btn default" id="rc-m-add">Add &amp; Tick</button>
+            <button type="button" class="btn" id="rc-m-cancel">Cancel</button>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="rc-totals">
+        <span>Opening <b id="rc-t-open"></b></span>
+        <span>Statement balance <b id="rc-t-stmt"></b></span>
+        <span>Cleared total <b id="rc-t-cleared"></b></span>
+        <span>Difference <b id="rc-t-diff"></b></span>
+      </div>
+      <div class="rc-foot">
+        <button type="button" class="btn" id="rc-add">Add Missing Item&hellip;</button>
+        <button type="button" class="btn" id="rc-back">&lt; Back</button>
+        <span class="rc-grow"></span>
+        <button type="button" class="btn default" id="rc-finish">Finish</button>
+        <button type="button" class="btn" id="rc-leave">Leave Unfinished</button>
+        <button type="button" class="btn js-rc-cancel">Cancel</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </div><!-- /desktop -->
 
 <!-- ===================== TASKBAR ===================== -->
@@ -347,6 +476,7 @@
   <div class="start-menu" id="start-menu" hidden>
     <div class="sm-left">
       <button data-open="checkbook"><img src="icons/checkbook.svg" alt="">CheckBook</button>
+      <button data-open="reconcile"><img src="icons/reconcile.svg" alt="">Reconcile</button>
       <button data-open="help"><img src="icons/help.svg" alt="">How to Use</button>
     </div>
     <div class="sm-right">
@@ -381,6 +511,7 @@
 <script src="js/core/schema.js"></script>
 <script src="js/core/store.js"></script>
 <script src="js/core/ledger.js"></script>
+<script src="js/core/reconcile.js"></script>
 <script src="js/ui/dialog.js"></script>
 <script src="js/ui/desktop.js"></script>
 <script src="js/checkbook/state.js"></script>
@@ -389,6 +520,7 @@
 <script src="js/checkbook/forms.js"></script>
 <script src="js/checkbook/lists.js"></script>
 <script src="js/checkbook/files.js"></script>
+<script src="js/reconcile/reconcile.js"></script>
 <script src="js/checkbook/main.js"></script>
 </body>
 </html>

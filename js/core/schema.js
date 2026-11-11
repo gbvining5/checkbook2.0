@@ -10,9 +10,9 @@
      3. Add a unit test that an old-version book still loads.
    Never remove a migration.
 
-   Data shape (VERSION 2):
+   Data shape (VERSION 3):
    {
-     version: 2,
+     version: 3,
      settings: { company: string, bankAccount: string, beginningBalance: cents },
      expenseAccounts: [string], incomeAccounts: [string],
      payees: [{ name, address, city }],
@@ -22,8 +22,15 @@
        type: 'Check' | 'Debit Card' | 'Electronic (ACH)' | 'Bank Fee' | 'Other' | 'Deposit',
        number: string, date: 'YYYY-MM-DD', payee: string,
        amount: cents (positive integer), memo: string, cleared: boolean,
+       reconciledId: null | string,                        // id of the reconciliation that locked it (v3)
        splits: [{ account, amount: cents, memo, payee }]   // amounts add up to `amount`
-     }]
+     }],
+     reconciliations: [{                                   // finished statements, oldest first (v3)
+       id: string, statementDate: 'YYYY-MM-DD',
+       openingBalance: cents, endingBalance: cents,
+       transactionIds: [string], finishedAt: ISO date-time string
+     }],
+     reconcileDraft: null | { statementDate, endingBalance: cents, tickedIds: [string] }  // unfinished session (v3)
    }
    ========================================================= */
 var CB = window.CB = window.CB || {};
@@ -31,7 +38,7 @@ var CB = window.CB = window.CB || {};
 CB.schema = (function () {
   'use strict';
 
-  var VERSION = 2;
+  var VERSION = 3;
   var KINDS = ['payment', 'deposit'];
 
   function blankBook() {
@@ -41,7 +48,9 @@ CB.schema = (function () {
       expenseAccounts: ['Maint.', 'Fuel', 'Office Supplies', 'Payroll', 'Utilities', 'Rent', 'Insurance', 'Bank Fees', 'Other Expense'],
       incomeAccounts: ['Sales', 'Services', 'Interest', 'Other Income'],
       payees: [],
-      transactions: []
+      transactions: [],
+      reconciliations: [],
+      reconcileDraft: null
     };
   }
 
@@ -55,10 +64,10 @@ CB.schema = (function () {
     ];
     b.transactions = [
       { id: uid(), seq: 1, kind: 'payment', type: 'Check', number: '1', date: '2026-11-07', payee: 'Carwash',
-        amount: 15000, memo: 'Detail & Wax', cleared: false,
+        amount: 15000, memo: 'Detail & Wax', cleared: false, reconciledId: null,
         splits: [{ account: 'Maint.', amount: 15000, memo: 'Detail & Wax', payee: 'Carwash' }] },
       { id: uid(), seq: 2, kind: 'deposit', type: 'Deposit', number: '', date: '2026-11-07', payee: 'ABC Co.',
-        amount: 15000, memo: '', cleared: false,
+        amount: 15000, memo: '', cleared: false, reconciledId: null,
         splits: [{ account: 'Services', amount: 15000, memo: '', payee: 'ABC Co.' }] }
     ];
     return b;
@@ -81,6 +90,16 @@ CB.schema = (function () {
         if (typeof p.city !== 'string') p.city = '';
       });
       d.version = 2;
+      return d;
+    },
+    // v2 -> v3: reconciliation (nothing is reconciled yet; existing `cleared` ticks are kept as they are)
+    2: function (d) {
+      (d.transactions || []).forEach(function (t) {
+        if (t && typeof t === 'object' && t.reconciledId === undefined) t.reconciledId = null;
+      });
+      if (!Array.isArray(d.reconciliations)) d.reconciliations = [];
+      if (d.reconcileDraft === undefined) d.reconcileDraft = null;
+      d.version = 3;
       return d;
     }
   };
@@ -112,9 +131,25 @@ CB.schema = (function () {
     if (!d || typeof d !== 'object') return ['Not a checkbook.'];
     if (!d.settings || typeof d.settings !== 'object') p.push('Settings are missing.');
     else if (!isCents(d.settings.beginningBalance)) p.push('Beginning balance is not a whole number of cents.');
-    ['expenseAccounts', 'incomeAccounts', 'payees', 'transactions'].forEach(function (k) {
+    ['expenseAccounts', 'incomeAccounts', 'payees', 'transactions', 'reconciliations'].forEach(function (k) {
       if (!Array.isArray(d[k])) p.push('"' + k + '" list is missing.');
     });
+
+    var recIds = {};
+    (Array.isArray(d.reconciliations) ? d.reconciliations : []).forEach(function (r, i) {
+      var label = 'Reconciliation ' + (i + 1);
+      if (!r || typeof r !== 'object') { p.push(label + ' is not valid.'); return; }
+      if (!r.id) p.push(label + ' has no id.');
+      else if (recIds[r.id]) p.push(label + ' has a duplicate id.');
+      recIds[r.id] = true;
+      if (!CB.util.isIsoDate(r.statementDate)) p.push(label + ' has a bad statement date.');
+      if (!isCents(r.openingBalance) || !isCents(r.endingBalance)) p.push(label + ' has a balance that is not a whole number of cents.');
+      if (!Array.isArray(r.transactionIds)) p.push(label + ' has no transaction list.');
+    });
+    var dr = d.reconcileDraft;
+    if (dr != null && (typeof dr !== 'object' || !CB.util.isIsoDate(dr.statementDate) || !isCents(dr.endingBalance) || !Array.isArray(dr.tickedIds))) {
+      p.push('The unfinished reconciliation is not valid.');
+    }
     if (!Array.isArray(d.transactions)) return p;
 
     var ids = {};
@@ -127,6 +162,7 @@ CB.schema = (function () {
       if (KINDS.indexOf(t.kind) === -1) p.push(label + ' has an unknown kind "' + t.kind + '".');
       if (!CB.util.isIsoDate(t.date)) p.push(label + ' has a bad date.');
       if (!isCents(t.amount) || t.amount <= 0) p.push(label + ' has a bad amount.');
+      if (t.reconciledId != null && !recIds[t.reconciledId]) p.push(label + ' is marked reconciled by a reconciliation that does not exist.');
       if (!Array.isArray(t.splits) || !t.splits.length) { p.push(label + ' has no account lines.'); return; }
       var sum = 0, splitsOk = true;
       t.splits.forEach(function (s) {

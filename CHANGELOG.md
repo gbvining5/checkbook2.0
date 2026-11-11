@@ -2,6 +2,9 @@
 
 Newest first. One or two lines per change — what changed and why.
 
+## 2026-11-11 — Reconcile, part 1
+- New Reconcile window (toolbar, Edit menu, desktop icon) to tick items against the bank statement until the difference is exactly $0.00, then lock them as reconciled ("R"); data format v3 adds `reconciliations`, `reconcileDraft` and `t.reconciledId`. Fixed: a check whose account lines were all blank was recorded with no account.
+
 ## 2026-11-11 — Safety foundations
 - Split the single `app.js` into small files by job (`js/core`, `js/ui`, `js/checkbook`). No behavior change.
 - Added data format versioning (now version 2) with automatic upgrades; old data is kept before upgrading.

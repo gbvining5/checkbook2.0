@@ -78,6 +78,35 @@ CB.ledger = (function () {
     return null;
   }
 
+  // The checks a new or edited transaction must pass before it is recorded.
+  // Used by Write Check / Make Deposit AND by Reconcile's "missing item", so the rules are the same.
+  // f: { kind, type, number, date, payee, amount (cents or NaN), splits: [{ account, amount, memo, payee }], editingId }
+  // Returns [{ field: 'date'|'payee'|'amount'|'account'|'number'|null, split: line index or null, message }] ([] = OK).
+  function checkTxn(book, f) {
+    var errs = [];
+    function bad(field, message, split) { errs.push({ field: field, split: split == null ? null : split, message: message }); }
+    function posCents(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n > 0; }
+
+    if (!f.date) bad('date', 'Enter a date.');
+    if (!f.payee) bad('payee', f.kind === 'payment' ? 'Enter who you paid.' : 'Enter who the money was received from.');
+    if (!posCents(f.amount)) bad('amount', 'Enter an amount greater than zero.');
+
+    var splits = f.splits || [];
+    if (!splits.length) bad('account', 'Choose an account.');
+    splits.forEach(function (s, i) {
+      if (!s.account) bad('account', 'Choose an account on every line.', i);
+      if (!posCents(s.amount)) bad('amount', 'Every account line needs an amount.', i);
+    });
+    if (posCents(f.amount) && splits.length) {
+      var sum = splits.reduce(function (t, s) { return t + (isFinite(s.amount) ? s.amount : 0); }, 0);
+      if (sum !== f.amount) bad(null, 'The account lines add up to ' + CB.money.format(sum) + ' but the total is ' + CB.money.format(f.amount) + '.');
+    }
+    if (f.kind === 'payment' && f.type === 'Check' && f.number && isDuplicateCheckNumber(book, f.number, f.editingId)) {
+      bad('number', 'Check #' + f.number + ' is already in the register.');
+    }
+    return errs;
+  }
+
   // Text used by the Find box
   function searchText(t) {
     return [t.payee, t.memo, t.number, t.type, CB.util.fmtDate(t.date), CB.money.plain(t.amount)]
@@ -87,5 +116,6 @@ CB.ledger = (function () {
 
   return { signed: signed, sorted: sorted, balances: balances, withRunningBalance: withRunningBalance,
     nextSeq: nextSeq, nextCheckNumber: nextCheckNumber, isDuplicateCheckNumber: isDuplicateCheckNumber,
-    accountLabel: accountLabel, numberLabel: numberLabel, findPayee: findPayee, getTxn: getTxn, searchText: searchText };
+    accountLabel: accountLabel, numberLabel: numberLabel, findPayee: findPayee, getTxn: getTxn, searchText: searchText,
+    checkTxn: checkTxn };
 })();

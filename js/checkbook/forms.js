@@ -103,7 +103,6 @@ CB.forms = (function () {
     var editor = kind === 'payment' ? splitsP : splitsD;
     clearInvalid(form);
     var errors = [];
-    function bad(el, msg) { el.classList.add('invalid'); errors.push(msg); }
 
     var date = $('#' + p + '-date').value;
     var payee = $('#' + p + '-payee').value.trim();
@@ -112,27 +111,24 @@ CB.forms = (function () {
     var number = $('#' + p + '-number').value.trim();
     var type = kind === 'payment' ? $('#p-type').value : 'Deposit';
 
-    if (!date) bad($('#' + p + '-date'), 'Enter a date.');
-    if (!payee) bad($('#' + p + '-payee'), kind === 'payment' ? 'Enter who you paid.' : 'Enter who the money was received from.');
-    if (!isFinite(amount) || amount <= 0) bad($('#' + p + '-amount'), 'Enter an amount greater than zero.');
-
     editor.syncSingle();
-    var rows = editor.read();
-    var splits = [];
-    rows.forEach(function (r) {
+    var all = editor.read();
+    var rows = all.filter(function (r) {
       var blank = !r.account && !r.amountRaw && !r.memo && !r.payee;
-      if (blank && rows.length > 1) return; // ignore empty extra lines
-      if (!r.account) bad($('.sp-acct', r.row), 'Choose an account on every line.');
-      if (!isFinite(r.amount) || r.amount <= 0) bad($('.sp-amt', r.row), 'Every account line needs an amount.');
-      splits.push({ account: r.account, amount: r.amount, memo: r.memo || memo, payee: r.payee || payee });
+      return !(blank && all.length > 1); // ignore empty extra lines
     });
-    if (isFinite(amount) && amount > 0 && splits.length) {
-      var sum = splits.reduce(function (s, x) { return s + (isFinite(x.amount) ? x.amount : 0); }, 0);
-      if (sum !== amount) errors.push('The account lines add up to ' + M.format(sum) + ' but the total is ' + M.format(amount) + '.');
-    }
-    if (kind === 'payment' && type === 'Check' && number && L.isDuplicateCheckNumber(book, number, CB.app.editing.payment)) {
-      bad($('#p-number'), 'Check #' + number + ' is already in the register.');
-    }
+    var splits = rows.map(function (r) {
+      return { account: r.account, amount: r.amount, memo: r.memo || memo, payee: r.payee || payee };
+    });
+
+    // the checks themselves live in CB.ledger.checkTxn (shared with Reconcile); here we just highlight fields
+    var fieldEl = { date: $('#' + p + '-date'), payee: $('#' + p + '-payee'), amount: $('#' + p + '-amount'), number: $('#p-number') };
+    L.checkTxn(book, { kind: kind, type: type, number: number, date: date, payee: payee, amount: amount,
+      splits: splits, editingId: CB.app.editing[kind] }).forEach(function (e) {
+      var el = e.split != null ? $(e.field === 'account' ? '.sp-acct' : '.sp-amt', rows[e.split].row) : fieldEl[e.field];
+      if (el) el.classList.add('invalid');
+      errors.push(e.message);
+    });
 
     if (errors.length) {
       var uniq = errors.filter(function (m, i) { return errors.indexOf(m) === i; });
@@ -152,7 +148,7 @@ CB.forms = (function () {
       message = 'Changes saved.';
     } else {
       txn = { id: CB.util.uid(), seq: L.nextSeq(book), kind: kind, type: type, number: number, date: date, payee: payee,
-        amount: amount, memo: memo, cleared: false, splits: splits };
+        amount: amount, memo: memo, cleared: false, reconciledId: null, splits: splits };
       book.transactions.push(txn);
       message = (kind === 'payment' ? type + ' ' : 'Deposit ') + M.format(amount) + (kind === 'payment' ? ' to ' : ' from ') + payee + ' recorded.';
     }

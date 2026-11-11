@@ -14,6 +14,7 @@ const files = [
   'js/core/schema.js',
   'js/core/store.js',
   'js/core/ledger.js',
+  'js/core/reconcile.js',
   'tests/harness.js',
   'tests/unit.tests.js'
 ];

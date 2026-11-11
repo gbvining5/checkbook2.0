@@ -27,7 +27,8 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
 | `js/core/money.js` | cents parsing/formatting, amount in words | no |
 | `js/core/schema.js` | data shape, `VERSION`, migrations, `validate()` | no |
 | `js/core/store.js` | load/save to localStorage safely, open backups | no |
-| `js/core/ledger.js` | balances, sorting, check numbers (pure functions) | no |
+| `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction) — pure functions | no |
+| `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish | no |
 | `js/ui/dialog.js` | message boxes, status bar | yes |
 | `js/ui/desktop.js` | desktop, windows (move/resize/min/max/close), taskbar | yes |
 | `js/checkbook/state.js` | `CB.app` — the open book + `commit()` | — |
@@ -36,9 +37,11 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
 | `js/checkbook/forms.js` | Write Check / Make Deposit: validate, record, edit, delete | yes |
 | `js/checkbook/lists.js` | Accounts & Payees tab, Settings tab | yes |
 | `js/checkbook/files.js` | Save/Open backup, CSV export, New checkbook | yes |
+| `js/reconcile/reconcile.js` | the Reconcile window (screen code) | yes |
 | `js/checkbook/main.js` | menus, toolbar, tabs; starts the app (**load last**) | yes |
 | `css/checkbook.css` | CheckBook window look | |
 | `css/desktop.css` | desktop, taskbar, window chrome | |
+| `css/reconcile.css` | Reconcile window, Rec. column "c"/"R" | |
 
 Everything hangs off one global: `window.CB`. Files are classic `<script>`s (not ES modules)
 so the app works when opened straight from a file (`file://`).

@@ -32,6 +32,13 @@ CB.register = (function () {
     $('#sb-count').textContent = n + ' transaction' + (n === 1 ? '' : 's');
   }
 
+  // Rec. column: blank = not cleared, "c" = cleared (click to toggle), "R" = reconciled (locked, not clickable)
+  function recCell(t) {
+    if (t.reconciledId != null) return '<span class="rec-r" title="Reconciled">R</span>';
+    return '<button type="button" class="rec-box" title="Cleared the bank? Click to change" aria-pressed="' + !!t.cleared + '">' +
+      (t.cleared ? 'c' : '') + '</button>';
+  }
+
   function rowHtml(t, balance) {
     var L = CB.ledger;
     var amtClass = t.kind === 'deposit' ? 'pos' : 'neg';
@@ -41,7 +48,7 @@ CB.register = (function () {
         '<td>' + esc(L.numberLabel(t)) + '</td>' +
         '<td title="' + esc(t.payee) + '">' + esc(t.payee) + '</td>' +
         '<td class="num ' + amtClass + '">' + amtText + '</td>' +
-        '<td class="rec"><input type="checkbox" class="rec-box" title="Cleared the bank"' + (t.cleared ? ' checked' : '') + '></td>' +
+        '<td class="rec">' + recCell(t) + '</td>' +
         '<td class="num' + (balance < 0 ? ' bal-neg' : '') + '">' + money(balance) + '</td>' +
       '</tr>' +
       '<tr class="r2">' +
@@ -87,14 +94,17 @@ CB.register = (function () {
   function init() {
     $('#find').addEventListener('input', render);
 
-    // click = select & edit; Rec. checkbox = mark cleared
+    // click = select & edit; Rec. button = mark cleared
     $('#register').addEventListener('click', function (e) {
       var tb = e.target.closest('tbody');
       if (!tb) return;
       var t = CB.ledger.getTxn(CB.app.book, tb.dataset.id);
       if (!t) return;
       if (e.target.classList.contains('rec-box')) {
-        t.cleared = e.target.checked;
+        if (t.reconciledId != null) return;   // reconciled items stay cleared
+        t.cleared = !t.cleared;
+        e.target.textContent = t.cleared ? 'c' : '';
+        e.target.setAttribute('aria-pressed', String(t.cleared));
         CB.app.save();
         renderHeader();
         CB.status(t.cleared ? 'Marked as cleared.' : 'Marked as not cleared.');
