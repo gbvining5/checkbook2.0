@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CheckBook - Unit Tests</title>
+<style>
+  body { font: 14px "Segoe UI", Tahoma, sans-serif; margin: 24px; color: #222; }
+  h1 { font-size: 20px; font-weight: normal; color: #1e5aa0; }
+  #summary { font-size: 16px; padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; }
+  .pass { background: #e3f6dc; color: #1f6e17; }
+  .fail { background: #fde4e1; color: #a3271b; }
+  li { margin: 3px 0; }
+  li.bad { color: #a3271b; }
+  li small { display: block; color: #555; margin-left: 18px; }
+</style>
+</head>
+<body>
+<h1>CheckBook unit tests</h1>
+<p>Open this page any time after changing code. Everything should be green.</p>
+<div id="summary">Running&hellip;</div>
+<ul id="results"></ul>
+
+<script src="../js/core/util.js"></script>
+<script src="../js/core/money.js"></script>
+<script src="../js/core/schema.js"></script>
+<script src="../js/core/store.js"></script>
+<script src="../js/core/ledger.js"></script>
+<script src="harness.js"></script>
+<script src="unit.tests.js"></script>
+<script>
+  var r = runTests();
+  var s = document.getElementById('summary');
+  s.className = r.failed ? 'fail' : 'pass';
+  s.textContent = r.failed ? '✘ ' + r.failed + ' failed, ' + r.passed + ' passed' : '✔ All ' + r.passed + ' tests passed';
+  document.getElementById('results').innerHTML = r.results.map(function (t) {
+    return '<li class="' + (t.ok ? '' : 'bad') + '">' + (t.ok ? '✔ ' : '✘ ') + CB.util.esc(t.name) +
+      (t.ok ? '' : '<small>' + CB.util.esc(t.error) + '</small>') + '</li>';
+  }).join('');
+  window.__testResults = r;
+</script>
+</body>
+</html>

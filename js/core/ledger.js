@@ -1,0 +1,91 @@
+/* =========================================================
+   CB.ledger — calculations on a book. PURE FUNCTIONS:
+   they take a book and return answers. They never change the
+   book, touch the screen, or save anything. Easy to test.
+   ========================================================= */
+var CB = window.CB = window.CB || {};
+
+CB.ledger = (function () {
+  'use strict';
+
+  // + for deposits, - for payments
+  function signed(t) { return t.kind === 'deposit' ? t.amount : -t.amount; }
+
+  // Register order: by date, then by the order entered
+  function sorted(book) {
+    return book.transactions.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.seq || 0) - (b.seq || 0);
+    });
+  }
+
+  function balances(book) {
+    var bal = book.settings.beginningBalance, cleared = book.settings.beginningBalance;
+    book.transactions.forEach(function (t) {
+      bal += signed(t);
+      if (t.cleared) cleared += signed(t);
+    });
+    return { current: bal, cleared: cleared };
+  }
+
+  // [{ t, balance }] in register order, with the running balance after each
+  function withRunningBalance(book) {
+    var bal = book.settings.beginningBalance;
+    return sorted(book).map(function (t) { bal += signed(t); return { t: t, balance: bal }; });
+  }
+
+  function nextSeq(book) {
+    return book.transactions.reduce(function (m, t) { return Math.max(m, t.seq || 0); }, 0) + 1;
+  }
+
+  function nextCheckNumber(book) {
+    var max = 0;
+    book.transactions.forEach(function (t) {
+      if (t.kind === 'payment' && t.type === 'Check') {
+        var n = parseInt(t.number, 10);
+        if (!isNaN(n) && n > max) max = n;
+      }
+    });
+    return String(max + 1);
+  }
+
+  function isDuplicateCheckNumber(book, number, exceptId) {
+    return book.transactions.some(function (t) {
+      return t.kind === 'payment' && t.type === 'Check' && t.number === number && t.id !== exceptId;
+    });
+  }
+
+  function accountLabel(t) {
+    if (!t.splits || !t.splits.length) return '';
+    if (t.splits.length === 1) return t.splits[0].account;
+    return '-- Split (' + t.splits.length + ') --';
+  }
+
+  function numberLabel(t) {
+    if (t.number) return t.number;
+    if (t.kind === 'deposit') return 'DEP';
+    return { 'Debit Card': 'DEBIT', 'Electronic (ACH)': 'EFT', 'Bank Fee': 'FEE' }[t.type] || '';
+  }
+
+  function findPayee(book, name) {
+    var n = String(name || '').trim().toLowerCase();
+    for (var i = 0; i < book.payees.length; i++) if (book.payees[i].name.toLowerCase() === n) return book.payees[i];
+    return null;
+  }
+
+  function getTxn(book, id) {
+    for (var i = 0; i < book.transactions.length; i++) if (book.transactions[i].id === id) return book.transactions[i];
+    return null;
+  }
+
+  // Text used by the Find box
+  function searchText(t) {
+    return [t.payee, t.memo, t.number, t.type, CB.util.fmtDate(t.date), CB.money.plain(t.amount)]
+      .concat((t.splits || []).map(function (s) { return s.account + ' ' + s.memo; }))
+      .join(' ').toLowerCase();
+  }
+
+  return { signed: signed, sorted: sorted, balances: balances, withRunningBalance: withRunningBalance,
+    nextSeq: nextSeq, nextCheckNumber: nextCheckNumber, isDuplicateCheckNumber: isDuplicateCheckNumber,
+    accountLabel: accountLabel, numberLabel: numberLabel, findPayee: findPayee, getTxn: getTxn, searchText: searchText };
+})();

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckBook</title>
+<link rel="icon" href="icons/checkbook.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/checkbook.css">
+<link rel="stylesheet" href="css/desktop.css">
+</head>
+<body>
+
+<!-- ===================== DESKTOP ===================== -->
+<div class="desktop" id="desktop">
+
+  <div class="desktop-icons" id="desktop-icons">
+    <button class="dicon" data-open="checkbook" title="Open CheckBook">
+      <img src="icons/checkbook.svg" alt=""><span>CheckBook</span>
+    </button>
+    <button class="dicon" data-open="help" title="Open How to Use">
+      <img src="icons/help.svg" alt=""><span>How to Use</span>
+    </button>
+  </div>
+
+<!-- ===================== CHECKBOOK WINDOW ===================== -->
+<div class="window" id="win-checkbook" data-app="checkbook" data-title="CheckBook" data-icon="icons/checkbook.svg" data-minw="560" data-minh="380">
+  <!-- Title bar -->
+  <div class="titlebar">
+    <img class="titlebar-img" src="icons/checkbook.svg" alt="">
+    <span class="titlebar-text" id="title-text">CheckBook</span>
+    <div class="caption-buttons">
+      <button class="cap cap-min" title="Minimize">&#8211;</button><button class="cap cap-max" title="Maximize">&#9633;</button><button class="cap cap-close" title="Close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- Menu bar -->
+  <div class="menubar" id="menubar">
+    <div class="menu">
+      <button class="menu-title">File</button>
+      <div class="menu-items">
+        <button data-cmd="new">New Checkbook&hellip;</button>
+        <button data-cmd="open">Open Backup&hellip;</button>
+        <button data-cmd="save">Save Backup</button>
+        <hr>
+        <button data-cmd="csv">Export to Excel (CSV)</button>
+        <button data-cmd="print">Print Register</button>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="menu-title">Edit</button>
+      <div class="menu-items">
+        <button data-cmd="check">Write Check / Payment</button>
+        <button data-cmd="deposit">Make Deposit</button>
+        <hr>
+        <button data-cmd="delete">Delete Selected Transaction</button>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="menu-title">Lists</button>
+      <div class="menu-items">
+        <button data-cmd="lists">Accounts &amp; Payees</button>
+        <button data-cmd="settings">Checkbook Settings</button>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="menu-title">Help</button>
+      <div class="menu-items">
+        <button data-cmd="help">How to Use</button>
+        <button data-cmd="about">About CheckBook</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="tb" data-cmd="check"><span class="ico ico-check"></span>Write Check</button>
+    <button class="tb" data-cmd="deposit"><span class="ico ico-dep"></span>Make Deposit</button>
+    <button class="tb" data-cmd="delete"><span class="ico ico-del"></span>Delete</button>
+    <span class="tb-sep"></span>
+    <button class="tb" data-cmd="save"><span class="ico ico-save"></span>Save Backup</button>
+    <button class="tb" data-cmd="open"><span class="ico ico-open"></span>Open Backup</button>
+    <button class="tb" data-cmd="csv"><span class="ico ico-xls"></span>Export</button>
+    <button class="tb" data-cmd="print"><span class="ico ico-print"></span>Print</button>
+  </div>
+
+  <!-- IE-style address bar -->
+  <div class="addressbar">
+    <span class="addr-label">Checkbook:</span>
+    <div class="addr-field"><span class="addr-icon">$</span><span id="addr-text"></span></div>
+    <div class="search-field">
+      <input id="find" type="search" placeholder="Find payee, memo, account&hellip;">
+      <span class="search-icon">&#9906;</span>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="content">
+    <!-- Register -->
+    <section class="pane register-pane">
+      <div class="pane-header">Check Register</div>
+      <div class="listview" id="register-wrap">
+        <table class="register" id="register">
+          <thead>
+            <tr>
+              <th class="c-date">Date</th>
+              <th class="c-num">Number</th>
+              <th class="c-payee">Payee</th>
+              <th class="c-amt">Amount</th>
+              <th class="c-rec" title="Reconciled / cleared the bank">Rec.</th>
+              <th class="c-bal">Balance</th>
+            </tr>
+            <tr class="sub">
+              <th></th>
+              <th>Account</th>
+              <th>Memo</th>
+              <th colspan="3">Trans Type</th>
+            </tr>
+          </thead>
+        </table>
+        <div class="empty" id="empty-msg" hidden>No transactions yet. Click <b>Write Check</b> or <b>Make Deposit</b> to add one.</div>
+      </div>
+      <div class="pane-hint">Click a transaction to view or edit it. Tick <b>Rec.</b> when it clears the bank.</div>
+    </section>
+
+    <!-- Forms -->
+    <section class="pane form-pane">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="check">Write Check</button>
+        <button class="tab" data-tab="deposit">Make Deposit</button>
+        <button class="tab" data-tab="lists">Accounts &amp; Payees</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
+
+      <div class="tab-body">
+
+        <!-- WRITE CHECK -->
+        <form class="tab-page active" id="page-check" autocomplete="off">
+          <div class="edit-banner" hidden>Editing an existing transaction</div>
+          <div class="check">
+            <div class="check-head">
+              <span class="check-title js-check-title"></span>
+              <span>Current Balance: <b class="js-curbal"></b></span>
+            </div>
+            <div class="row">
+              <label>Type
+                <select id="p-type">
+                  <option>Check</option>
+                  <option>Debit Card</option>
+                  <option>Electronic (ACH)</option>
+                  <option>Bank Fee</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label><span id="p-num-label">Check #</span> <input id="p-number" class="w-num"></label>
+              <label>Date <input id="p-date" type="date"></label>
+            </div>
+            <div class="row">
+              <label class="grow">Pay to <input id="p-payee" list="payee-list" placeholder="Payee name"></label>
+              <label>Amount $ <input id="p-amount" class="w-amt money" inputmode="decimal" placeholder="0.00"></label>
+            </div>
+            <div class="words" id="p-words">&nbsp;</div>
+            <div class="address" id="p-address"></div>
+            <div class="row">
+              <label class="grow">Memo <input id="p-memo" placeholder="What was it for?"></label>
+            </div>
+          </div>
+
+          <fieldset class="group">
+            <legend>Expense Account(s)</legend>
+            <table class="splits">
+              <thead><tr><th>Account</th><th>Amount</th><th>Memo</th><th>Payee</th><th></th></tr></thead>
+              <tbody id="p-splits"></tbody>
+            </table>
+            <div class="split-foot">
+              <button type="button" class="btn small" id="p-addsplit">+ Add Line</button>
+              <span class="remaining" id="p-remaining"></span>
+            </div>
+          </fieldset>
+
+          <div class="form-buttons">
+            <button type="submit" class="btn default js-record">Record</button>
+            <button type="button" class="btn js-clear">Clear</button>
+          </div>
+        </form>
+
+        <!-- MAKE DEPOSIT -->
+        <form class="tab-page" id="page-deposit" autocomplete="off">
+          <div class="edit-banner" hidden>Editing an existing transaction</div>
+          <div class="check deposit">
+            <div class="check-head">
+              <span class="check-title js-check-title"></span>
+              <span>Current Balance: <b class="js-curbal"></b></span>
+            </div>
+            <div class="row">
+              <label>Deposit # <input id="d-number" class="w-num" placeholder="(optional)"></label>
+              <label>Date <input id="d-date" type="date"></label>
+            </div>
+            <div class="row">
+              <label class="grow">Received From <input id="d-payee" list="payee-list" placeholder="Who paid you?"></label>
+              <label>Amount $ <input id="d-amount" class="w-amt money" inputmode="decimal" placeholder="0.00"></label>
+            </div>
+            <div class="words" id="d-words">&nbsp;</div>
+            <div class="row">
+              <label class="grow">Memo <input id="d-memo" placeholder="What was it for?"></label>
+            </div>
+          </div>
+
+          <fieldset class="group">
+            <legend>Income Account(s)</legend>
+            <table class="splits">
+              <thead><tr><th>Account</th><th>Amount</th><th>Memo</th><th>Received From</th><th></th></tr></thead>
+              <tbody id="d-splits"></tbody>
+            </table>
+            <div class="split-foot">
+              <button type="button" class="btn small" id="d-addsplit">+ Add Line</button>
+              <span class="remaining" id="d-remaining"></span>
+            </div>
+          </fieldset>
+
+          <div class="form-buttons">
+            <button type="submit" class="btn default js-record">Record</button>
+            <button type="button" class="btn js-clear">Clear</button>
+          </div>
+        </form>
+
+        <!-- LISTS -->
+        <div class="tab-page" id="page-lists">
+          <div class="lists-grid">
+            <fieldset class="group">
+              <legend>Expense Accounts</legend>
+              <select size="8" id="l-expense" class="listbox"></select>
+              <input id="l-expense-name" placeholder="Account name">
+              <div class="btn-row">
+                <button class="btn small" data-list="expense" data-act="add">Add</button>
+                <button class="btn small" data-list="expense" data-act="rename">Rename</button>
+                <button class="btn small" data-list="expense" data-act="remove">Remove</button>
+              </div>
+            </fieldset>
+            <fieldset class="group">
+              <legend>Income Accounts</legend>
+              <select size="8" id="l-income" class="listbox"></select>
+              <input id="l-income-name" placeholder="Account name">
+              <div class="btn-row">
+                <button class="btn small" data-list="income" data-act="add">Add</button>
+                <button class="btn small" data-list="income" data-act="rename">Rename</button>
+                <button class="btn small" data-list="income" data-act="remove">Remove</button>
+              </div>
+            </fieldset>
+            <fieldset class="group span2">
+              <legend>Payees</legend>
+              <div class="payee-grid">
+                <select size="8" id="l-payees" class="listbox"></select>
+                <div class="payee-fields">
+                  <label>Name <input id="py-name"></label>
+                  <label>Street <input id="py-address"></label>
+                  <label>City, State ZIP <input id="py-city"></label>
+                  <div class="btn-row">
+                    <button class="btn small" id="py-add">Add New</button>
+                    <button class="btn small" id="py-update">Update</button>
+                    <button class="btn small" id="py-remove">Remove</button>
+                  </div>
+                </div>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+
+        <!-- SETTINGS -->
+        <div class="tab-page" id="page-settings">
+          <fieldset class="group">
+            <legend>Checkbook</legend>
+            <div class="settings-grid">
+              <label for="s-company">Company / Owner</label><input id="s-company">
+              <label for="s-bank">Bank Account (last 4 digits)</label><input id="s-bank" maxlength="20">
+              <label for="s-begin">Beginning Balance $</label><input id="s-begin" class="money" inputmode="decimal">
+            </div>
+            <div class="btn-row right"><button class="btn default" id="s-apply">Apply</button></div>
+          </fieldset>
+          <fieldset class="group">
+            <legend>Your Data</legend>
+            <p class="note">Everything saves automatically <b>in this web browser on this computer</b>.
+              It does not follow you to other computers, and clearing your browser history can erase it.
+              Use <b>Save Backup</b> regularly and keep the file somewhere safe.</p>
+            <div class="btn-row">
+              <button class="btn" data-cmd="save">Save Backup</button>
+              <button class="btn" data-cmd="open">Open Backup</button>
+              <button class="btn" data-cmd="csv">Export to Excel</button>
+              <button class="btn" data-cmd="new">New Checkbook&hellip;</button>
+            </div>
+          </fieldset>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- Status bar -->
+  <div class="statusbar">
+    <span class="sb-panel grow" id="sb-msg">Ready</span>
+    <span class="sb-panel">Beginning: <b id="sb-begin"></b></span>
+    <span class="sb-panel">Cleared: <b id="sb-cleared"></b></span>
+    <span class="sb-panel">Current Balance: <b id="sb-current"></b></span>
+    <span class="sb-panel" id="sb-count"></span>
+  </div>
+</div>
+
+<!-- ===================== HELP WINDOW ===================== -->
+<div class="window" id="win-help" data-app="help" data-title="How to Use" data-icon="icons/help.svg" data-minw="320" data-minh="240">
+  <div class="titlebar">
+    <img class="titlebar-img" src="icons/help.svg" alt="">
+    <span class="titlebar-text">How to Use</span>
+    <div class="caption-buttons">
+      <button class="cap cap-min" title="Minimize">&#8211;</button><button class="cap cap-max" title="Maximize">&#9633;</button><button class="cap cap-close" title="Close">&#10005;</button>
+    </div>
+  </div>
+  <div class="help-body">
+    <h2>Getting started</h2>
+    <ol>
+      <li><b>Settings tab:</b> enter your company name, the last 4 digits of the bank account, and the beginning balance.</li>
+      <li><b>Accounts &amp; Payees tab:</b> set up expense accounts (Maint., Fuel&hellip;), income accounts, and payee addresses.</li>
+      <li><b>Write Check:</b> fill in who you paid, the amount, and pick the expense account, then click <b>Record</b>.
+        To split one check across several accounts, click <b>+ Add Line</b>.</li>
+      <li><b>Make Deposit:</b> same idea for money coming in.</li>
+      <li><b>Register:</b> click any transaction to edit it. Tick <b>Rec.</b> when it shows on your bank statement.</li>
+    </ol>
+    <h2>Windows</h2>
+    <ul>
+      <li><b>Double-click</b> a desktop icon to open it.</li>
+      <li><b>Drag the title bar</b> to move a window. <b>Drag any edge or corner</b> to resize it.</li>
+      <li><b>&#8211; Minimize</b> sends the window to the taskbar at the bottom. Click it there to bring it back.</li>
+      <li><b>&#9633; Maximize</b> fills the screen (or double-click the title bar). Click again to restore.</li>
+      <li><b>&#10005; Close</b> closes the window. Your checkbook data is kept; double-click the icon to reopen.</li>
+      <li>The button at the far right of the taskbar shows the desktop.</li>
+    </ul>
+    <h2>Your data</h2>
+    <p>Everything is saved automatically <b>in this web browser on this computer only</b>. Nothing is sent over the internet.
+      Use <b>File &gt; Save Backup</b> regularly and keep the file somewhere safe &mdash; if this browser&rsquo;s data is cleared,
+      the backup is the only copy.</p>
+  </div>
+</div>
+
+</div><!-- /desktop -->
+
+<!-- ===================== TASKBAR ===================== -->
+<div class="taskbar" id="taskbar">
+  <button class="start-orb" id="start-orb" title="Start" aria-label="Start"></button>
+  <div class="start-menu" id="start-menu" hidden>
+    <div class="sm-left">
+      <button data-open="checkbook"><img src="icons/checkbook.svg" alt="">CheckBook</button>
+      <button data-open="help"><img src="icons/help.svg" alt="">How to Use</button>
+    </div>
+    <div class="sm-right">
+      <button data-sm="about">About CheckBook</button>
+      <button data-sm="show-desktop">Show Desktop</button>
+      <button data-sm="reset-layout">Reset Window Layout</button>
+    </div>
+  </div>
+  <div class="task-buttons" id="task-buttons"></div>
+  <div class="tray"><span id="clock-time"></span><span id="clock-date"></span></div>
+  <button class="show-desktop" id="show-desktop" title="Show desktop" aria-label="Show desktop"></button>
+</div>
+
+<datalist id="payee-list"></datalist>
+<input type="file" id="file-open" accept=".json,application/json" hidden>
+
+<!-- Dialog -->
+<div class="overlay" id="overlay" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="titlebar small">
+      <span class="titlebar-text" id="dlg-title"></span>
+      <div class="caption-buttons"><button class="cap cap-close" id="dlg-x" aria-label="Close">&#10005;</button></div>
+    </div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-buttons" id="dlg-buttons"></div>
+  </div>
+</div>
+
+<!-- Load order matters: core (no screen code) -> ui -> checkbook features -> main (starts the app) -->
+<script src="js/core/util.js"></script>
+<script src="js/core/money.js"></script>
+<script src="js/core/schema.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/ledger.js"></script>
+<script src="js/ui/dialog.js"></script>
+<script src="js/ui/desktop.js"></script>
+<script src="js/checkbook/state.js"></script>
+<script src="js/checkbook/register.js"></script>
+<script src="js/checkbook/splits.js"></script>
+<script src="js/checkbook/forms.js"></script>
+<script src="js/checkbook/lists.js"></script>
+<script src="js/checkbook/files.js"></script>
+<script src="js/checkbook/main.js"></script>
+</body>
+</html>

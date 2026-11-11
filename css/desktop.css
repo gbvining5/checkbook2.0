@@ -1,0 +1,184 @@
+/* =========================================================
+   Desktop, windows, taskbar - Windows 7 style
+   ========================================================= */
+
+:root { --taskbar-h: 40px; }
+
+/* ---------- Desktop ---------- */
+.desktop {
+  position: fixed;
+  left: 0; top: 0; right: 0;
+  bottom: var(--taskbar-h);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 22% 105%, rgba(120, 215, 255, .75) 0%, transparent 45%),
+    radial-gradient(ellipse at 85% 0%, rgba(40, 120, 210, .9) 0%, transparent 55%),
+    radial-gradient(circle at 60% 55%, rgba(255, 255, 255, .10) 0%, transparent 35%),
+    linear-gradient(160deg, #0b4f9c 0%, #1b74c9 45%, #0a3d7a 100%);
+}
+
+/* ---------- Desktop icons ---------- */
+.desktop-icons {
+  position: absolute; left: 8px; top: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dicon {
+  width: 84px; padding: 6px 2px 5px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: 1px solid transparent; border-radius: 3px;
+  color: #fff; font: inherit; text-align: center; cursor: default;
+  text-shadow: 0 1px 2px #000, 0 0 4px rgba(0, 0, 0, .8);
+}
+.dicon img { width: 48px; height: 48px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); pointer-events: none; }
+.dicon span { line-height: 1.25; }
+.dicon:hover { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .28); }
+.dicon.selected, .dicon:focus-visible {
+  outline: none;
+  background: rgba(150, 200, 255, .35); border-color: rgba(200, 230, 255, .7);
+}
+
+/* ---------- Windows ---------- */
+.desktop .window {
+  position: absolute;
+  min-height: 0;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.window.closed { display: none !important; }
+.window.minimized {
+  opacity: 0; transform: translateY(60px) scale(.85);
+  pointer-events: none; visibility: hidden;
+  transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
+}
+.window.maximized {
+  left: 0 !important; top: 0 !important;
+  width: 100% !important; height: 100% !important;
+  border-radius: 0; padding: 0 2px 2px;
+}
+.window.maximized .resize-handle { display: none; }
+.window.dragging, .window.resizing { transition: none; user-select: none; }
+.window .titlebar { cursor: default; touch-action: none; }
+
+/* inactive windows look paler, like Win7 */
+.window:not(.active) { background: linear-gradient(#dde8f5, #ccdcef 40px, #d6e3f2); border-color: #6d87a6; }
+.window:not(.active) .titlebar { color: #5a6b80; }
+.window:not(.active) .cap { opacity: .75; }
+
+/* resize handles */
+.resize-handle { position: absolute; z-index: 5; touch-action: none; }
+.rh-n  { top: -3px; left: 8px; right: 8px; height: 7px; cursor: n-resize; }
+.rh-s  { bottom: -3px; left: 8px; right: 8px; height: 7px; cursor: s-resize; }
+.rh-e  { right: -3px; top: 8px; bottom: 8px; width: 7px; cursor: e-resize; }
+.rh-w  { left: -3px; top: 8px; bottom: 8px; width: 7px; cursor: w-resize; }
+.rh-ne { top: -3px; right: -3px; width: 12px; height: 12px; cursor: ne-resize; }
+.rh-nw { top: -3px; left: -3px; width: 12px; height: 12px; cursor: nw-resize; }
+.rh-se { bottom: -3px; right: -3px; width: 14px; height: 14px; cursor: se-resize; }
+.rh-sw { bottom: -3px; left: -3px; width: 12px; height: 12px; cursor: sw-resize; }
+
+/* Help window body */
+.help-body {
+  flex: 1; overflow: auto; background: #fff;
+  border: 1px solid #8aa6c7; padding: 6px 18px 14px; line-height: 1.55;
+}
+.help-body h2 { font-size: 15px; font-weight: normal; color: #1e5aa0; margin: 12px 0 4px; }
+.help-body ol, .help-body ul { padding-left: 20px; margin: 4px 0; }
+
+/* ---------- Taskbar ---------- */
+.taskbar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: var(--taskbar-h);
+  display: flex; align-items: center; gap: 4px; padding-left: 4px;
+  background:
+    linear-gradient(rgba(255, 255, 255, .28), rgba(255, 255, 255, .08) 50%, rgba(0, 0, 0, .12) 51%, rgba(0, 0, 0, .05)),
+    linear-gradient(90deg, #1c3e66, #2a5788 50%, #1c3e66);
+  border-top: 1px solid rgba(160, 200, 240, .65);
+  box-shadow: 0 -1px 0 rgba(0, 0, 0, .5);
+  z-index: 50000;
+  user-select: none;
+}
+
+.start-orb {
+  width: 38px; height: 38px; flex: none; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid #0d2a4d;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, .85) 0%, rgba(255, 255, 255, 0) 45%),
+    conic-gradient(from 45deg, #f25022 0 25%, #7fba00 0 50%, #00a4ef 0 75%, #ffb900 0 100%);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .25), 0 0 8px rgba(0, 0, 0, .6) inset;
+  position: relative;
+}
+.start-orb::after {
+  content: ""; position: absolute; inset: 5px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #6ec3ff 0%, #1d5fae 60%, #0c3466 100%);
+  box-shadow: inset 0 0 3px rgba(255, 255, 255, .6);
+}
+.start-orb:hover::after { background: radial-gradient(circle at 50% 35%, #9bdcff 0%, #2f7fd6 60%, #10457f 100%); }
+
+.task-buttons { flex: 1; display: flex; gap: 3px; min-width: 0; height: 100%; align-items: center; overflow: hidden; }
+.task-btn {
+  display: flex; align-items: center; gap: 6px;
+  height: 34px; max-width: 190px; min-width: 44px; padding: 0 10px 0 6px;
+  font: inherit; color: #fff; text-shadow: 0 1px 1px #000; cursor: default;
+  border: 1px solid rgba(255, 255, 255, .25); border-radius: 3px;
+  background: linear-gradient(rgba(255, 255, 255, .22), rgba(255, 255, 255, .06) 50%, rgba(255, 255, 255, .02) 51%, rgba(255, 255, 255, .1));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25);
+}
+.task-btn img { width: 24px; height: 24px; flex: none; }
+.task-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-btn:hover { background: linear-gradient(rgba(255, 255, 255, .4), rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .08) 51%, rgba(255, 255, 255, .2)); }
+.task-btn.active {
+  background: linear-gradient(rgba(170, 215, 255, .55), rgba(110, 170, 235, .35) 50%, rgba(70, 130, 210, .35) 51%, rgba(120, 180, 240, .45));
+  border-color: rgba(200, 230, 255, .8);
+}
+.task-btn.is-min span { font-style: italic; opacity: .85; }
+
+.tray {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px; line-height: 1.3; padding: 0 10px; text-shadow: 0 1px 1px #000;
+  border-left: 1px solid rgba(0, 0, 0, .3); box-shadow: -1px 0 rgba(255, 255, 255, .15);
+  height: 100%;
+}
+.show-desktop {
+  width: 14px; height: 100%; flex: none; padding: 0; cursor: pointer;
+  border: none; border-left: 1px solid rgba(255, 255, 255, .3);
+  background: linear-gradient(90deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .25));
+}
+.show-desktop:hover { background: linear-gradient(90deg, rgba(255, 255, 255, .3), rgba(255, 255, 255, .5)); }
+
+/* ---------- Start menu ---------- */
+.start-menu {
+  position: fixed; left: 2px; bottom: calc(var(--taskbar-h) + 2px);
+  width: 380px; display: flex; padding: 8px;
+  border: 1px solid #2c4a6d; border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(rgba(70, 110, 160, .92), rgba(30, 60, 100, .95));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .3) inset, 0 6px 20px rgba(0, 0, 0, .55);
+  z-index: 60000;
+}
+.start-menu[hidden] { display: none; }
+.sm-left {
+  flex: 1.3; background: #fff; border: 1px solid #6b8bb3; border-radius: 3px; padding: 4px;
+  display: flex; flex-direction: column; gap: 2px; min-height: 180px;
+}
+.sm-left button {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  font: inherit; font-size: 13px; padding: 4px 6px; background: none;
+  border: 1px solid transparent; border-radius: 3px; cursor: default;
+}
+.sm-left button img { width: 32px; height: 32px; }
+.sm-left button:hover { border-color: #aecff7; background: linear-gradient(#f2f8fe, #dbeafc); }
+.sm-right { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 4px 0 4px 8px; }
+.sm-right button {
+  font: inherit; color: #fff; text-align: left; padding: 6px 8px; background: none; cursor: default;
+  border: 1px solid transparent; border-radius: 3px; text-shadow: 0 1px 1px #000;
+}
+.sm-right button:hover {
+  border-color: rgba(255, 255, 255, .45);
+  background: linear-gradient(rgba(255, 255, 255, .3), rgba(255, 255, 255, .1));
+}
+
+/* dialogs sit above everything */
+.overlay { z-index: 70000 !important; }
+
+/* small screens: hide labels in taskbar buttons */
+@media (max-width: 600px) {
+  .task-btn span { display: none; }
+  .task-btn { padding: 0 6px; }
+  .start-menu { width: calc(100vw - 4px); }
+}
