@@ -57,7 +57,8 @@ CB.lists = (function () {
       var old = sel.value;
       if (!old) return CB.dialog('Rename Account', 'Select an account in the list first.');
       if (!name) return CB.dialog('Rename Account', 'Type the new name in the box.');
-      if (name !== old && exists(name)) return CB.dialog('Rename Account', '"' + esc(name) + '" is already in the list.');
+      // only another account counts as a clash, so "fuel" -> "Fuel" (capitals only) is allowed
+      if (name.toLowerCase() !== old.toLowerCase() && exists(name)) return CB.dialog('Rename Account', '"' + esc(name) + '" is already in the list.');
       list[list.indexOf(old)] = name;
       var kind = which === 'expense' ? 'payment' : 'deposit', n = 0;
       book.transactions.forEach(function (t) {

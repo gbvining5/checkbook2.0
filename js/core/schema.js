@@ -57,18 +57,19 @@ CB.schema = (function () {
   function sampleBook() {
     var uid = CB.util.uid;
     var b = blankBook();
-    b.settings = { company: 'Vincor, LLC', bankAccount: '', beginningBalance: 90000000 };
+    // Made-up example data only: no real people, companies or addresses.
+    b.settings = { company: 'ABC Co.', bankAccount: '', beginningBalance: 1000000 };   // $10,000.00
     b.payees = [
-      { name: 'ABC Co.', address: '', city: '' },
-      { name: 'Carwash', address: '103 Sharpe St.', city: 'Macon, GA 31204' }
+      { name: 'Maple St. Car Wash', address: '123 Maple St.', city: 'Anytown, ST 12345' },
+      { name: 'XYZ Corp.', address: '', city: '' }
     ];
     b.transactions = [
-      { id: uid(), seq: 1, kind: 'payment', type: 'Check', number: '1', date: '2026-11-07', payee: 'Carwash',
+      { id: uid(), seq: 1, kind: 'payment', type: 'Check', number: '1', date: '2026-11-07', payee: 'Maple St. Car Wash',
         amount: 15000, memo: 'Detail & Wax', cleared: false, reconciledId: null,
-        splits: [{ account: 'Maint.', amount: 15000, memo: 'Detail & Wax', payee: 'Carwash' }] },
-      { id: uid(), seq: 2, kind: 'deposit', type: 'Deposit', number: '', date: '2026-11-07', payee: 'ABC Co.',
+        splits: [{ account: 'Maint.', amount: 15000, memo: 'Detail & Wax', payee: 'Maple St. Car Wash' }] },
+      { id: uid(), seq: 2, kind: 'deposit', type: 'Deposit', number: '', date: '2026-11-07', payee: 'XYZ Corp.',
         amount: 15000, memo: '', cleared: false, reconciledId: null,
-        splits: [{ account: 'Services', amount: 15000, memo: '', payee: 'ABC Co.' }] }
+        splits: [{ account: 'Services', amount: 15000, memo: '', payee: 'XYZ Corp.' }] }
     ];
     return b;
   }
@@ -123,7 +124,7 @@ CB.schema = (function () {
     return data;
   }
 
-  function isCents(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n; }
+  var isCents = CB.money.isCents;
 
   // Check a book for problems. Returns a list of plain-English problems ([] = all good).
   function validate(d) {
@@ -185,7 +186,16 @@ CB.schema = (function () {
       if (!Array.isArray(d[lists[k]])) return 'the "' + lists[k] + '" list is missing';
     }
     var i, j, t;
-    for (i = 0; i < d.payees.length; i++) if (!isObj(d.payees[i])) return 'payee ' + (i + 1) + ' cannot be read';
+    // account and payee names are compared as text everywhere (adding, renaming, finding a payee)
+    for (k = 0; k < 2; k++) {
+      for (i = 0; i < d[lists[k]].length; i++) {
+        if (typeof d[lists[k]][i] !== 'string') return 'entry ' + (i + 1) + ' in the "' + lists[k] + '" list is not a name';
+      }
+    }
+    for (i = 0; i < d.payees.length; i++) {
+      if (!isObj(d.payees[i])) return 'payee ' + (i + 1) + ' cannot be read';
+      if (typeof d.payees[i].name !== 'string') return 'payee ' + (i + 1) + ' has no name';
+    }
     for (i = 0; i < d.transactions.length; i++) {
       t = d.transactions[i];
       if (!isObj(t)) return 'transaction ' + (i + 1) + ' cannot be read';

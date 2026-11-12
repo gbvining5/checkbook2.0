@@ -2,6 +2,13 @@
 
 Newest first. One or two lines per change — what changed and why.
 
+## 2026.11.12-4 — Bug fixes from review
+- Two CheckBook windows open at once no longer overwrite each other: when one saves, the other stops saving and offers Reload.
+- Saved data that can't be read is never overwritten when its rescue copy can't be made (storage full), and starting again no longer piles up identical rescue copies.
+- Editing a check's payee or memo now updates its account lines; backups with a nameless payee are refused as damaged; an account can be renamed by changing only its capitals.
+- Message boxes now wait their turn instead of closing each other; check #0101 and #101 count as the same check; impossible dates are refused.
+- The sample checkbook uses made-up names (ABC Co., Maple St.), and repeated code was merged (new transactions, whole-cents check, "Please Fix" box). No data format change.
+
 ## 2026.11.12-3 — Repository housekeeping
 - Added .gitignore (keeps node_modules, test output, zips and your CheckBook_ backups/CSV exports out of git) and the GitHub workflow (.github/workflows/test.yml) that CLAUDE.md already described; no app changes.
 
@@ -16,13 +23,13 @@ Newest first. One or two lines per change — what changed and why.
 - Backups with unreadable transaction entries are refused (they used to be saved and blank the register on every start).
 - CSV export: text like `-2+3+cmd|...` is now prefixed so Excel can't run it as a formula; only plain numbers may start with `-`.
 
-## 2026-11-11 — Reconcile, part 2
+## 2026.11.11-3 — Reconcile, part 2
 - Reconcile now gives hints when it doesn't balance, warns before changing/deleting a reconciled item or the beginning balance, confirms Finish, can undo the most recent reconciliation, shows a printable report (after Finish and for past statements), reminds you on Cancel that added items stay, and CSV Rec. shows R/X/blank; no data format change.
 
-## 2026-11-11 — Reconcile, part 1
+## 2026.11.11-2 — Reconcile, part 1
 - New Reconcile window (toolbar, Edit menu, desktop icon) to tick items against the bank statement until the difference is exactly $0.00, then lock them as reconciled ("R"); data format v3 adds `reconciliations`, `reconcileDraft` and `t.reconciledId`. Fixed: a check whose account lines were all blank was recorded with no account.
 
-## 2026-11-11 — Safety foundations
+## 2026.11.11 — Safety foundations
 - Split the single `app.js` into small files by job (`js/core`, `js/ui`, `js/checkbook`). No behavior change.
 - Added data format versioning (now version 2) with automatic upgrades; old data is kept before upgrading.
 - Loading never silently discards data anymore: unreadable data is kept in a rescue copy, and data
@@ -33,8 +40,8 @@ Newest first. One or two lines per change — what changed and why.
 - Added automated tests (unit + end-to-end) and a GitHub workflow that runs them on every push.
 - Added `CLAUDE.md` (rules for changing the code) and this changelog.
 
-## 2026-11-09 — Desktop
+## 2026.11.09-2 — Desktop
 - Windows 7 desktop with icons, taskbar, Start menu; windows move, resize, minimize, maximize, close.
 
-## 2026-11-09 — First version
+## 2026.11.09 — First version
 - Check register, Write Check, Make Deposit, split accounts, payees, settings, backup/CSV/print.

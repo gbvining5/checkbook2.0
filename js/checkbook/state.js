@@ -20,8 +20,26 @@ CB.app = (function () {
   };
 
   var saveWarned = false;
+  var otherWindowShown = false;
+
+  // Another CheckBook window saved: CB.store has stopped saving here. Say so, and offer a reload.
+  app.otherWindowSaved = function () {
+    if (otherWindowShown) return;   // don't stack up copies of the same box
+    otherWindowShown = true;
+    CB.status('Not saving: CheckBook was changed in another window.');
+    CB.dialog('Open in Another Window',
+      'CheckBook was changed in another window or tab. So that those changes are not overwritten, ' +
+      '<b>this window has stopped saving</b>.<br><br>' +
+      'Click <b>Reload</b> to see the latest checkbook here, or close this window and keep working in the other one.',
+      [{ label: 'Reload', value: true, primary: true }, { label: 'Not Now', value: false }]
+    ).then(function (reload) {
+      otherWindowShown = false;
+      if (reload) window.location.reload();
+    });
+  };
 
   app.save = function () {
+    if (CB.store.otherWindow) { app.otherWindowSaved(); return false; }   // remind every time a change can't be kept
     var ok = CB.store.save(app.book);
     if (!ok && !saveWarned) {
       saveWarned = true;

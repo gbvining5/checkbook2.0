@@ -685,6 +685,99 @@ test('only amount, date or kind changes to a reconciled item need the warning', 
   ok(/statement dated 01\/31\/2026/.test(R.beginningBalanceWarning(b)), 'uses the first reconciliation');
 });
 
+/* ---------------- fixes in 2026.11.12-4 ---------------- */
+test('damaged saved data found again on the next start does not make another rescue copy', function () {
+  var b = CB.schema.sampleBook(); b.transactions.push(null);
+  var init = {}; init[CB.store.KEY] = JSON.stringify(b);
+  var realNow = Date.now, clock = 1000;
+  Date.now = function () { return clock += 1000; };   // each start at a different time (a new rescue key each time)
+  try {
+    withFakeStorage(init, function (data) {
+      CB.store.load(); CB.store.load(); CB.store.load();
+      eq(rescueKeys(data).length, 1, 'one rescue copy, however many starts');
+      ok(CB.store.saveBlocked);
+      CB.store.unblock(true);
+    });
+  } finally { Date.now = realNow; }
+});
+
+test('unreadable saved data is never overwritten when its rescue copy cannot be written', function () {
+  ['{ not json', JSON.stringify({ hello: 'not a checkbook' })].forEach(function (raw) {
+    var init = {}; init[CB.store.KEY] = raw;
+    withFakeStorage(init, function (data) {
+      var b = CB.store.load();
+      eq(rescueKeys(data).length, 0, 'the rescue copy failed');
+      ok(CB.store.saveBlocked, 'so saving is off');
+      eq(b.transactions, [], 'nothing from it is shown');
+      eq(CB.store.save(CB.schema.sampleBook()), false);
+      eq(data[CB.store.KEY], raw, 'stored data untouched');
+      ok(/could not keep a rescue copy/.test(CB.store.warnings[0]), CB.store.warnings[0]);
+      eq(CB.store.unblock(), false, 'not without a rescue copy or the user confirming');
+      eq(CB.store.unblock(true), true);
+    }, function (k) { return k.indexOf('checkbook.rescue.') === 0; });
+  });
+});
+
+test('payees without a name and accounts that are not names count as damage (they crashed Record)', function () {
+  var D = CB.schema.findDamage;
+  var b = CB.schema.sampleBook(); b.payees.push({ address: '', city: '' });
+  eq(D(b), 'payee 3 has no name');
+  ok(/damaged \(payee 3 has no name\)/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));
+  b = CB.schema.sampleBook(); b.expenseAccounts.push(5);
+  eq(D(b), 'entry 10 in the "expenseAccounts" list is not a name');
+  b = CB.schema.sampleBook(); b.incomeAccounts[0] = null;
+  eq(D(b), 'entry 1 in the "incomeAccounts" list is not a name');
+  eq(D(CB.schema.sampleBook()), null);
+});
+
+test('check numbers that differ only by leading zeros are the same check', function () {
+  var b = bookWith([{ type: 'Check', number: '101' }]);
+  ok(CB.ledger.isDuplicateCheckNumber(b, '0101', null));
+  ok(CB.ledger.isDuplicateCheckNumber(b, ' 101 ', null));
+  ok(!CB.ledger.isDuplicateCheckNumber(b, '1010', null));
+  ok(!CB.ledger.isDuplicateCheckNumber(b, '101A', null));
+  ok(CB.ledger.checkTxn(b, { kind: 'payment', type: 'Check', number: '0101', date: '2026-01-01', payee: 'X', amount: 100,
+    splits: [{ account: 'Maint.', amount: 100 }] }).some(function (e) { return e.field === 'number'; }));
+});
+
+test('isIsoDate accepts only real calendar dates', function () {
+  ['2026-11-12', '2028-02-29', '2026-12-31', '2026-01-01'].forEach(function (s) { ok(CB.util.isIsoDate(s), s); });
+  ['2026-13-45', '2026-02-30', '2027-02-29', '2026-00-10', '2026-04-31', '11/07/2026', '', null].forEach(function (s) {
+    ok(!CB.util.isIsoDate(s), String(s));
+  });
+});
+
+test('checkTxn refuses a date that is not a real date', function () {
+  var errs = CB.ledger.checkTxn(CB.schema.blankBook(), { kind: 'payment', type: 'Debit Card', number: '', date: '2026-02-30',
+    payee: 'X', amount: 100, splits: [{ account: 'Fuel', amount: 100 }] });
+  eq(errs.map(function (e) { return e.field; }), ['date']);
+  ok(/not a real date/.test(errs[0].message));
+  ok(CB.schema.validate(bookWith([{ date: '2026-02-30' }])).some(function (p) { return /bad date/.test(p); }));
+});
+
+test('newTxn: one shape for every new transaction (forms and Reconcile)', function () {
+  var b = bookWith([{}, {}]);
+  var t = CB.ledger.newTxn(b, { kind: 'deposit', type: 'Deposit', number: '', date: '2026-01-02', payee: 'P', amount: 500, memo: 'm',
+    splits: [{ account: 'Sales', amount: 500, memo: 'm', payee: 'P' }] });
+  ok(t.id && typeof t.id === 'string');
+  eq(t.seq, 3);
+  eq([t.cleared, t.reconciledId], [false, null]);
+  eq(b.transactions.length, 2, 'it does not change the book');
+  b.transactions.push(t);
+  eq(CB.schema.validate(b), []);
+});
+
+test('money.isCents is the one whole-cents check', function () {
+  [0, 1, -5, 15000].forEach(function (n) { ok(CB.money.isCents(n), String(n)); });
+  [1.5, NaN, Infinity, '100', null].forEach(function (n) { ok(!CB.money.isCents(n), String(n)); });
+});
+
+test('sample book is made-up example data only', function () {
+  var b = CB.schema.sampleBook(), text = JSON.stringify(b);
+  eq(b.settings.company, 'ABC Co.');
+  ['Vincor', 'Sharpe', 'Macon', '31204'].forEach(function (w) { ok(text.indexOf(w) === -1, w + ' should not be in the sample'); });
+});
+
 /* ---------------- app version ---------------- */
 test('app version is the release date (YEAR.MONTH.DAY, optional -N)', function () {
   ok(/^\d{4}\.\d{2}\.\d{2}(-\d+)?$/.test(CB.APP_VERSION), CB.APP_VERSION);

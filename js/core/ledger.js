@@ -49,9 +49,16 @@ CB.ledger = (function () {
     return String(max + 1);
   }
 
+  // Check numbers are compared as numbers when they are all digits, so "0101" and "101" are the same check
+  function checkNumberKey(n) {
+    var s = String(n == null ? '' : n).trim();
+    return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, '') : s;
+  }
+
   function isDuplicateCheckNumber(book, number, exceptId) {
+    var key = checkNumberKey(number);
     return book.transactions.some(function (t) {
-      return t.kind === 'payment' && t.type === 'Check' && t.number === number && t.id !== exceptId;
+      return t.kind === 'payment' && t.type === 'Check' && checkNumberKey(t.number) === key && t.id !== exceptId;
     });
   }
 
@@ -73,6 +80,14 @@ CB.ledger = (function () {
     return null;
   }
 
+  // A new transaction ready to push onto book.transactions (not cleared, not reconciled).
+  // Used by Write Check / Make Deposit AND by Reconcile's "missing item", so new entries always have the same shape.
+  // f: { kind, type, number, date, payee, amount, memo, splits }
+  function newTxn(book, f) {
+    return { id: CB.util.uid(), seq: nextSeq(book), kind: f.kind, type: f.type, number: f.number, date: f.date, payee: f.payee,
+      amount: f.amount, memo: f.memo, cleared: false, reconciledId: null, splits: f.splits };
+  }
+
   function getTxn(book, id) {
     for (var i = 0; i < book.transactions.length; i++) if (book.transactions[i].id === id) return book.transactions[i];
     return null;
@@ -85,9 +100,10 @@ CB.ledger = (function () {
   function checkTxn(book, f) {
     var errs = [];
     function bad(field, message, split) { errs.push({ field: field, split: split == null ? null : split, message: message }); }
-    function posCents(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n > 0; }
+    function posCents(n) { return CB.money.isCents(n) && n > 0; }
 
     if (!f.date) bad('date', 'Enter a date.');
+    else if (!CB.util.isIsoDate(f.date)) bad('date', 'That date is not a real date.');
     if (!f.payee) bad('payee', f.kind === 'payment' ? 'Enter who you paid.' : 'Enter who the money was received from.');
     if (!posCents(f.amount)) bad('amount', 'Enter an amount greater than zero.');
 
@@ -115,7 +131,7 @@ CB.ledger = (function () {
   }
 
   return { signed: signed, sorted: sorted, balances: balances, withRunningBalance: withRunningBalance,
-    nextSeq: nextSeq, nextCheckNumber: nextCheckNumber, isDuplicateCheckNumber: isDuplicateCheckNumber,
+    nextSeq: nextSeq, nextCheckNumber: nextCheckNumber, isDuplicateCheckNumber: isDuplicateCheckNumber, newTxn: newTxn,
     accountLabel: accountLabel, numberLabel: numberLabel, findPayee: findPayee, getTxn: getTxn, searchText: searchText,
     checkTxn: checkTxn };
 })();

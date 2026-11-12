@@ -203,15 +203,11 @@ CB.reconcileUI = (function () {
   }
 
   /* ---------- actions ---------- */
-  function showErrors(list) {
-    CB.dialog('Please Fix', '<ul><li>' + list.filter(function (m, i) { return list.indexOf(m) === i; }).map(esc).join('</li><li>') + '</li></ul>');
-  }
-
   function next() {
     var date = $('#rc-date').value;
     var ending = M.toCents($('#rc-ending').value);
     var errs = R.checkStart(CB.app.book, date, ending);
-    if (errs.length) { showErrors(errs); return; }
+    if (errs.length) { CB.dialog.errors(errs); return; }
     session.statementDate = date;
     session.endingBalance = ending;
     if (!session.tickedIds) session.tickedIds = R.initialTicks(CB.app.book, date);
@@ -395,13 +391,12 @@ CB.reconcileUI = (function () {
     if (errs.length) {
       var el = { date: '#rc-m-date', payee: '#rc-m-payee', amount: '#rc-m-amount', account: '#rc-m-account' };
       errs.forEach(function (e) { if (el[e.field]) $(el[e.field]).classList.add('invalid'); });
-      showErrors(errs.map(function (e) { return e.message; }));
+      CB.dialog.errors(errs.map(function (e) { return e.message; }));
       return false;
     }
 
     CB.lists.ensurePayee(payee);
-    var txn = { id: CB.util.uid(), seq: L.nextSeq(book), kind: k.kind, type: k.type, number: '', date: date, payee: payee,
-      amount: amount, memo: memo, cleared: false, reconciledId: null, splits: splits };
+    var txn = L.newTxn(book, { kind: k.kind, type: k.type, number: '', date: date, payee: payee, amount: amount, memo: memo, splits: splits });
     book.transactions.push(txn);
     session.tickedIds.push(txn.id);   // arrives already ticked
     addedIds.push(txn.id);

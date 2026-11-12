@@ -12,7 +12,7 @@ async function open(page) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(APP);
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00'); // sample book
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00'); // sample book
   return errors;
 }
 
@@ -34,7 +34,7 @@ test('write a check, split a check, make a deposit', async ({ page }) => {
   const errors = await open(page);
 
   await writeCheck(page, 'Carwash', '1,250.5', 'Maint.');
-  await expect(page.locator('#sb-current')).toHaveText('$898,749.50');
+  await expect(page.locator('#sb-current')).toHaveText('$8,749.50');
   await expect(page.locator('#p-number')).toHaveValue('3'); // next check number
 
   // split: 300 = 200 Fuel + 100 Maint.
@@ -50,14 +50,14 @@ test('write a check, split a check, make a deposit', async ({ page }) => {
   await page.click('#dlg-buttons button');
   await page.fill('#p-splits tr:nth-child(2) .sp-amt', '100');
   await page.click('#page-check .js-record');
-  await expect(page.locator('#sb-current')).toHaveText('$898,449.50');
+  await expect(page.locator('#sb-current')).toHaveText('$8,449.50');
 
   await page.click('.tab[data-tab=deposit]');
   await page.fill('#d-payee', 'ABC Co.');
   await page.fill('#d-amount', '5000');
   await page.selectOption('#d-splits .sp-acct', 'Sales');
   await page.click('#page-deposit .js-record');
-  await expect(page.locator('#sb-current')).toHaveText('$903,449.50');
+  await expect(page.locator('#sb-current')).toHaveText('$13,449.50');
 
   expect(errors).toEqual([]);
 });
@@ -69,7 +69,7 @@ test('cannot record a check with no payee or a bad amount', async ({ page }) => 
   await expect(page.locator('#dlg-body')).toContainText('Enter who you paid');
   await expect(page.locator('#dlg-body')).toContainText('greater than zero');
   await page.click('#dlg-buttons button');
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');
 });
 
 test('edit, reconcile, delete, and everything survives a reload', async ({ page }) => {
@@ -78,19 +78,19 @@ test('edit, reconcile, delete, and everything survives a reload', async ({ page 
   await expect(page.locator('#page-check .edit-banner')).toBeVisible();
   await page.fill('#p-amount', '200');
   await page.click('#page-check .js-record');
-  await expect(page.locator('#sb-current')).toHaveText('$899,950.00');
+  await expect(page.locator('#sb-current')).toHaveText('$9,950.00');
 
   await page.click('#register tbody:nth-of-type(1) .rec-box');
-  await expect(page.locator('#sb-cleared')).toHaveText('$899,800.00');
+  await expect(page.locator('#sb-cleared')).toHaveText('$9,800.00');
 
   await page.click('#register tbody:nth-of-type(2) tr.r1 td:nth-child(3)'); // the deposit
   await page.click('.toolbar [data-cmd=delete]');
   await page.click('#dlg-buttons .btn.default');
-  await expect(page.locator('#sb-current')).toHaveText('$899,800.00');
+  await expect(page.locator('#sb-current')).toHaveText('$9,800.00');
 
   await page.reload();
-  await expect(page.locator('#sb-current')).toHaveText('$899,800.00');
-  await expect(page.locator('#sb-cleared')).toHaveText('$899,800.00');
+  await expect(page.locator('#sb-current')).toHaveText('$9,800.00');
+  await expect(page.locator('#sb-cleared')).toHaveText('$9,800.00');
   await expect(page.locator('#register tbody')).toHaveCount(1);
 });
 
@@ -120,7 +120,7 @@ test('a file that is not a checkbook is rejected safely', async ({ page }) => {
   await page.setInputFiles('#file-open', file);
   await expect(page.locator('#dlg-body')).toContainText('not a CheckBook backup');
   await page.click('#dlg-buttons button');
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');
 });
 
 test('windows: minimize, restore, maximize, close, reopen', async ({ page }) => {
@@ -163,16 +163,16 @@ async function confirmFinish(page, text) {
 test('reconcile: off by $15 until a $15 bank fee is added, then Finish locks the items as R', async ({ page }) => {
   const errors = await open(page);
   await openReconcile(page);
-  await expect(page.locator('#rc-opening')).toHaveValue('$900,000.00');   // beginning balance, first time
+  await expect(page.locator('#rc-opening')).toHaveValue('$10,000.00');   // beginning balance, first time
   await expect(page.locator('#rc-opening')).toHaveAttribute('readonly', '');
-  await startStatement(page, '2026-11-30', '899,985.00');
+  await startStatement(page, '2026-11-30', '9,985.00');
 
   await expect(page.locator('#rc-pay tbody tr[data-id]')).toHaveCount(1);
   await expect(page.locator('#rc-dep tbody tr[data-id]')).toHaveCount(1);
   await page.click('[data-mark=payment][data-on="1"]');
   await page.click('[data-mark=deposit][data-on="1"]');
-  await expect(page.locator('#rc-t-stmt')).toHaveText('$899,985.00');
-  await expect(page.locator('#rc-t-cleared')).toHaveText('$900,000.00');
+  await expect(page.locator('#rc-t-stmt')).toHaveText('$9,985.00');
+  await expect(page.locator('#rc-t-cleared')).toHaveText('$10,000.00');
   await expect(page.locator('#rc-t-diff')).toHaveText('-$15.00');
   await expect(page.locator('#rc-finish')).toBeDisabled();
 
@@ -199,20 +199,20 @@ test('reconcile: off by $15 until a $15 bank fee is added, then Finish locks the
   await expect(page.locator('#register .rec-r')).toHaveCount(3);
   await expect(page.locator('#register .rec-r').first()).toHaveText('R');
   await expect(page.locator('#register .rec-box')).toHaveCount(0);       // R is not clickable
-  await expect(page.locator('#sb-cleared')).toHaveText('$899,985.00');
-  await expect(page.locator('#sb-current')).toHaveText('$899,985.00');
+  await expect(page.locator('#sb-cleared')).toHaveText('$9,985.00');
+  await expect(page.locator('#sb-current')).toHaveText('$9,985.00');
 
   const saved = await savedBook(page);
   expect(saved.version).toBe(3);
   expect(saved.reconciliations).toHaveLength(1);
-  expect(saved.reconciliations[0]).toMatchObject({ statementDate: '2026-11-30', openingBalance: 90000000, endingBalance: 89998500 });
+  expect(saved.reconciliations[0]).toMatchObject({ statementDate: '2026-11-30', openingBalance: 1000000, endingBalance: 998500 });
   expect(saved.reconciliations[0].transactionIds).toHaveLength(3);
   expect(saved.transactions.every(t => t.reconciledId === saved.reconciliations[0].id && t.cleared)).toBe(true);
   expect(saved.reconcileDraft).toBeNull();
 
   // next statement starts from this one's ending balance
   await openReconcile(page);
-  await expect(page.locator('#rc-opening')).toHaveValue('$899,985.00');
+  await expect(page.locator('#rc-opening')).toHaveValue('$9,985.00');
   expect(errors).toEqual([]);
 });
 
@@ -220,7 +220,7 @@ test('reconcile: Cancel changes nothing', async ({ page }) => {
   await open(page);
   const before = await savedBook(page);
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('#rc-pay tbody tr[data-id] .rc-tick');
   await expect(page.locator('#rc-t-diff')).toHaveText('$150.00');
   await page.click('#rc-step2 .js-rc-cancel');
@@ -235,12 +235,12 @@ test('reconcile: Cancel changes nothing', async ({ page }) => {
 test('reconcile: Leave Unfinished survives a reload; Cancel keeps the saved session; Start Over discards it', async ({ page }) => {
   await open(page);
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('#rc-dep tbody tr[data-id] .rc-tick');
   await page.click('#rc-leave');
   await expect(page.locator('#win-reconcile')).toHaveClass(/closed/);
   let saved = await savedBook(page);
-  expect(saved.reconcileDraft).toMatchObject({ statementDate: '2026-11-30', endingBalance: 90000000 });
+  expect(saved.reconcileDraft).toMatchObject({ statementDate: '2026-11-30', endingBalance: 1000000 });
   expect(saved.reconcileDraft.tickedIds).toHaveLength(1);
   expect(saved.transactions.every(t => t.reconciledId === null && t.cleared === false)).toBe(true);   // no transaction changed
 
@@ -272,7 +272,7 @@ test('reconcile: Leave Unfinished survives a reload; Cancel keeps the saved sess
 test('reconcile: closing with the X while items are ticked asks Leave Unfinished / Discard / Cancel', async ({ page }) => {
   await open(page);
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('#rc-pay tbody tr[data-id] .rc-tick');
 
   await page.click('#win-reconcile .cap-close');
@@ -287,7 +287,7 @@ test('reconcile: closing with the X while items are ticked asks Leave Unfinished
   expect((await savedBook(page)).reconcileDraft).toBeNull();
 
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('#rc-pay tbody tr[data-id] .rc-tick');
   await page.click('#win-reconcile .cap-close');
   await page.click('#dlg-buttons button:has-text("Leave Unfinished")');
@@ -352,7 +352,7 @@ test('a check whose account lines are all blank is refused', async ({ page }) =>
   await page.click('#page-check .js-record');
   await expect(page.locator('#dlg-body')).toContainText('Choose an account');
   await page.click('#dlg-buttons button');
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');
   expect((await savedBook(page)).transactions).toHaveLength(2);
 });
 
@@ -366,10 +366,10 @@ async function checkOn(page, payee, amount, account, date) {
   await page.click('#page-check .js-record');
   await expect(page.locator('#overlay')).toBeHidden();
 }
-// Reconcile the sample book's two items (Carwash check $150, ABC Co. deposit $150) through 11/30/2026
+// Reconcile the sample book's two items (Maple St. Car Wash check $150, XYZ Corp. deposit $150) through 11/30/2026
 async function reconcileSample(page) {
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('[data-mark=payment][data-on="1"]');
   await page.click('[data-mark=deposit][data-on="1"]');
   await page.click('#rc-finish');
@@ -383,14 +383,14 @@ test('reconcile: hints show only when true; Finish confirms; the report shows th
   const errors = await open(page);
   await checkOn(page, 'Shell', '40', 'Fuel', '2026-11-10');          // will stay outstanding
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await expect(page.locator('#rc-hints')).toBeHidden();               // nothing ticked yet: the two $150 items cancel out, so it balances
   await page.click('[data-mark=payment][data-on="1"]');
   await page.click('#rc-pay tbody tr:has-text("Shell") .rc-tick');    // untick Shell
-  // only the $150 check is ticked: off by +$150.00, which is exactly the unticked ABC Co. deposit
+  // only the $150 check is ticked: off by +$150.00, which is exactly the unticked XYZ Corp. deposit
   await expect(page.locator('#rc-t-diff')).toHaveText('$150.00');
   await expect(page.locator('#rc-hints')).toBeVisible();
-  await expect(page.locator('#rc-hints li')).toHaveText(['Did ABC Co., $150.00 (11/07/2026) clear?']);
+  await expect(page.locator('#rc-hints li')).toHaveText(['Did XYZ Corp., $150.00 (11/07/2026) clear?']);
   await page.click('[data-mark=deposit][data-on="1"]');
   await expect(page.locator('#rc-t-diff')).toHaveText('$0.00');
   await expect(page.locator('#rc-hints')).toBeHidden();
@@ -406,12 +406,12 @@ test('reconcile: hints show only when true; Finish confirms; the report shows th
   await confirmFinish(page, 'Reconcile 2 items for statement dated 11/30/2026? You can undo this later.');
   const sum = page.locator('#rc-rep-sum');
   await expect(sum.locator('tr', { hasText: 'Statement date' }).locator('td')).toHaveText('11/30/2026');
-  await expect(sum.locator('tr.rc-rep-open td')).toHaveText('$900,000.00');
+  await expect(sum.locator('tr.rc-rep-open td')).toHaveText('$10,000.00');
   await expect(sum.locator('tr.rc-rep-pay th')).toHaveText('Cleared payments (1)');
   await expect(sum.locator('tr.rc-rep-pay td')).toHaveText('-$150.00');
   await expect(sum.locator('tr.rc-rep-dep th')).toHaveText('Cleared deposits (1)');
   await expect(sum.locator('tr.rc-rep-dep td')).toHaveText('$150.00');
-  await expect(sum.locator('tr.rc-rep-end td')).toHaveText('$900,000.00');
+  await expect(sum.locator('tr.rc-rep-end td')).toHaveText('$10,000.00');
   await expect(page.locator('#rc-rep-out tbody tr')).toHaveCount(1);
   await expect(page.locator('#rc-rep-out tbody tr')).toContainText('Shell');
   await expect(page.locator('#rc-rep-out tfoot')).toContainText('$40.00');
@@ -444,7 +444,7 @@ test('reconciled item: editing the amount warns (Cancel keeps it); editing the m
   await dlgButton(page, 'Cancel').click();
   let t = (await savedBook(page)).transactions[0];
   expect([t.amount, t.reconciledId != null]).toEqual([15000, true]);
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');
 
   await page.click(carwash);                                          // reloads the saved values
   await page.fill('#p-memo', 'Wash only');
@@ -474,7 +474,7 @@ test('undo last reconciliation: R items go back to c, only the most recent one, 
   // second statement: one more check
   await checkOn(page, 'Shell', '40', 'Fuel', '2026-12-05');
   await openReconcile(page);
-  await startStatement(page, '2026-12-31', '899960');
+  await startStatement(page, '2026-12-31', '9960');
   await page.click('[data-mark=payment][data-on="1"]');
   await page.click('#rc-finish');
   await confirmFinish(page, 'Reconcile 1 item for statement dated 12/31/2026? You can undo this later.');
@@ -494,7 +494,7 @@ test('undo last reconciliation: R items go back to c, only the most recent one, 
   expect(saved.reconciliations.map(r => r.statementDate)).toEqual(['2026-11-30']);   // only the most recent one went
   await expect(page.locator('#register .rec-r')).toHaveCount(2);
   await expect(page.locator('#register tbody:has-text("Shell") .rec-box')).toHaveText('c');
-  await expect(page.locator('#rc-opening')).toHaveValue('$900,000.00');
+  await expect(page.locator('#rc-opening')).toHaveValue('$10,000.00');
 
   // and again: the first one is now the most recent
   await page.click('#rc-undo');
@@ -513,7 +513,7 @@ test('undo is refused while a reconciliation is in progress', async ({ page }) =
   await open(page);
   await reconcileSample(page);
   await openReconcile(page);
-  await startStatement(page, '2026-12-31', '900000');
+  await startStatement(page, '2026-12-31', '10000');
   await page.click('#rc-back');                                       // ticks are in memory
   await page.click('#rc-undo');
   await expect(page.locator('#dlg-body')).toContainText('Finish or Cancel the reconciliation you are working on first.');
@@ -524,7 +524,7 @@ test('undo is refused while a reconciliation is in progress', async ({ page }) =
 test('Cancel after adding a missing item says it stays in the register', async ({ page }) => {
   await open(page);
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '899985');
+  await startStatement(page, '2026-11-30', '9985');
   await page.click('#rc-add');
   await page.fill('#rc-m-payee', 'First Bank');
   await page.fill('#rc-m-amount', '15');
@@ -536,7 +536,7 @@ test('Cancel after adding a missing item says it stays in the register', async (
 
   // Cancel with nothing added: no message
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '899985');
+  await startStatement(page, '2026-11-30', '9985');
   await page.click('#rc-step2 .js-rc-cancel');
   await expect(page.locator('#overlay')).toBeHidden();
 });
@@ -545,10 +545,10 @@ test('changing the beginning balance after a reconciliation warns; CSV Rec. colu
   await open(page);
   // no reconciliation yet: no warning
   await page.click('.tab[data-tab=settings]');
-  await page.fill('#s-begin', '900001');
+  await page.fill('#s-begin', '10001');
   await page.click('#s-apply');
   await expect(page.locator('#overlay')).toBeHidden();
-  await page.fill('#s-begin', '900000');
+  await page.fill('#s-begin', '10000');
   await page.click('#s-apply');
 
   await reconcileSample(page);
@@ -561,8 +561,8 @@ test('changing the beginning balance after a reconciliation warns; CSV Rec. colu
   await expect(page.locator('#dlg-body')).toContainText('statement dated 11/30/2026');
   await expect(page.locator('#dlg-body')).toContainText('Changing the beginning balance will make that reconciliation wrong.');
   await dlgButton(page, 'Cancel').click();
-  expect((await savedBook(page)).settings.beginningBalance).toBe(90000000);
-  await expect(page.locator('#s-begin')).toHaveValue('900000.00');
+  expect((await savedBook(page)).settings.beginningBalance).toBe(1000000);
+  await expect(page.locator('#s-begin')).toHaveValue('10000.00');
   await page.fill('#s-begin', '1000');
   await page.click('#s-apply');
   await dlgButton(page, 'Save Anyway').click();
@@ -576,7 +576,7 @@ test('changing the beginning balance after a reconciliation warns; CSV Rec. colu
     .map(l => l.split(','))
     .filter(c => c[0])                                                // first line of each transaction
     .map(c => [c[4], c[7]]));
-  expect(rec).toEqual([['Carwash', 'R'], ['ABC Co.', 'R'], ['Shell', 'X'], ['Gas Co', '']]);
+  expect(rec).toEqual([['Maple St. Car Wash', 'R'], ['XYZ Corp.', 'R'], ['Shell', 'X'], ['Gas Co', '']]);
 });
 
 test('CSV: memo text like "-2+3+cmd|..." cannot run as an Excel formula; plain negative amounts stay numbers', async ({ page }) => {
@@ -604,7 +604,7 @@ test('a damaged backup is refused and nothing is changed', async ({ page }) => {
   await expect(page.locator('#dlg-body')).toContainText('damaged');
   await page.click('#dlg-buttons button');
   await page.reload();
-  await expect(page.locator('#sb-current')).toHaveText('$900,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');
   expect(errors).toEqual([]);
 });
 
@@ -718,7 +718,7 @@ test('File > Recover Rescue Copies lists the copies and downloads one', async ({
 test('closing or reloading with unsaved reconcile ticks asks first', async ({ page, context }) => {
   await open(page);
   await openReconcile(page);
-  await startStatement(page, '2026-11-30', '900000');
+  await startStatement(page, '2026-11-30', '10000');
   await page.click('[data-mark=payment][data-on="1"]');               // unsaved ticks
   let asked = null;
   page.once('dialog', d => { asked = d.type(); d.dismiss(); });        // "Stay on page"
@@ -734,4 +734,118 @@ test('closing or reloading with unsaved reconcile ticks asks first', async ({ pa
   await p2.close({ runBeforeUnload: true });
   await expect.poll(() => p2.isClosed()).toBe(true);
   expect(asked2).toBe(null);
+});
+
+/* ---------------- fixes in 2026.11.12-4 ---------------- */
+async function depositOn(page, payee, amount, account) {
+  await page.click('.tab[data-tab=deposit]');
+  await page.fill('#d-payee', payee);
+  await page.fill('#d-amount', amount);
+  await page.selectOption('#d-splits tr:nth-child(1) .sp-acct', account);
+  await page.click('#page-deposit .js-record');
+}
+
+test('two windows: when one saves, the other stops saving (so it cannot wipe that out) and offers Reload', async ({ context }) => {
+  const a = await context.newPage();
+  const errors = await open(a);
+  const b = await context.newPage();
+  await open(b);
+
+  await depositOn(b, 'From window B', '5', 'Sales');                   // B saves...
+  await expect(a.locator('#dlg-title')).toHaveText('Open in Another Window');   // ...A is told
+  await dlgButton(a, 'Not Now').click();
+
+  await writeCheck(a, 'From window A', '1', 'Fuel');                    // A's out-of-date book is NOT saved
+  await expect(a.locator('#dlg-title')).toHaveText('Open in Another Window');   // and A is reminded
+  const payees = (await savedBook(b)).transactions.map(t => t.payee);
+  expect(payees).toContain('From window B');
+  expect(payees).not.toContain('From window A');
+
+  await dlgButton(a, 'Reload').click();                                 // Reload shows B's work in A
+  await expect(a.locator('#sb-current')).toHaveText('$10,005.00');
+  await expect(a.locator('#overlay')).toBeHidden();
+  await depositOn(b, 'Again from B', '1', 'Sales');                     // B still saves normally
+  await expect(b.locator('#overlay')).toBeHidden();
+  expect((await savedBook(b)).transactions.length).toBe(4);
+  expect(errors).toEqual([]);
+});
+
+test('editing a check: its account lines follow a new payee or memo, unless a line was set on its own', async ({ page }) => {
+  const errors = await open(page);
+  const check = async () => (await savedBook(page)).transactions.find(t => t.kind === 'payment');
+  const editSampleCheck = () => page.click('#register tbody:nth-of-type(1) tr.r1 td:nth-child(3)');
+
+  await editSampleCheck();
+  await page.fill('#p-payee', 'Elm St. Car Wash');
+  await page.fill('#p-memo', 'Wash only');
+  await page.click('#page-check .js-record');
+  expect((await check()).splits[0]).toMatchObject({ payee: 'Elm St. Car Wash', memo: 'Wash only' });
+
+  await editSampleCheck();
+  await page.fill('#p-splits tr:nth-child(1) .sp-memo', 'Line memo');  // typed on the line itself
+  await page.click('#page-check .js-record');
+  await editSampleCheck();
+  await page.fill('#p-memo', 'Changed again');
+  await page.click('#page-check .js-record');
+  const t = await check();
+  expect(t.memo).toBe('Changed again');
+  expect(t.splits[0]).toMatchObject({ payee: 'Elm St. Car Wash', memo: 'Line memo' });
+  expect(errors).toEqual([]);
+});
+
+test('an account can be renamed by changing only its capital letters; a real clash is still refused', async ({ page }) => {
+  await open(page);
+  await page.click('.tab[data-tab=lists]');
+  await page.selectOption('#l-expense', 'Fuel');
+  await page.fill('#l-expense-name', 'FUEL');
+  await page.click('[data-list=expense][data-act=rename]');
+  await expect(page.locator('#overlay')).toBeHidden();
+  const accounts = (await savedBook(page)).expenseAccounts;
+  expect(accounts).toContain('FUEL');
+  expect(accounts).not.toContain('Fuel');
+
+  await page.selectOption('#l-expense', 'FUEL');
+  await page.fill('#l-expense-name', 'maint.');
+  await page.click('[data-list=expense][data-act=rename]');
+  await expect(page.locator('#dlg-body')).toContainText('already in the list');
+});
+
+test('a second message box waits for the first one instead of replacing it', async ({ page }) => {
+  await open(page);
+  const answers = page.evaluate(() => Promise.all([
+    CB.dialog('First', 'one'),
+    CB.dialog('Second', 'two', [{ label: 'Yes', value: 'yes', primary: true }])
+  ]));
+  await expect(page.locator('#dlg-title')).toHaveText('First');
+  await page.click('#dlg-buttons button');
+  await expect(page.locator('#dlg-title')).toHaveText('Second');
+  await page.click('#dlg-buttons button');
+  expect(await answers).toEqual([true, 'yes']);
+  await expect(page.locator('#overlay')).toBeHidden();
+});
+
+test('storage full: unreadable saved data is not overwritten at startup when no rescue copy can be made', async ({ page }) => {
+  await page.addInitScript(() => {                                      // rescue copies fail, like a full storage
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (String(k).startsWith('checkbook.rescue.')) throw new DOMException('full', 'QuotaExceededError');
+      return set.call(this, k, v);
+    };
+  });
+  const errors = await open(page);
+  await loadWithStored(page, '{ my real data, damaged');
+  await expect(page.locator('#dlg-body')).toContainText('could not keep a rescue copy');
+  await page.click('#dlg-buttons button');
+  expect(await stored(page)).toBe('{ my real data, damaged');          // not replaced by a fresh book
+  await page.reload();
+  expect(await stored(page)).toBe('{ my real data, damaged');
+  expect(errors).toEqual([]);
+});
+
+test('damaged saved data: starting again and again keeps just one rescue copy', async ({ page }) => {
+  await open(page);
+  const bad = await page.evaluate(() => { const b = CB.schema.sampleBook(); b.transactions.push(null); return JSON.stringify(b); });
+  await loadWithStored(page, bad);
+  for (let i = 0; i < 3; i++) await loadWithStored(page, bad);
+  expect(await rescues(page)).toEqual([bad]);
 });

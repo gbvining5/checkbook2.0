@@ -35,7 +35,15 @@ CB.util = (function () {
     });
   }
 
-  function isIsoDate(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+  // A real calendar date written YYYY-MM-DD ('2026-02-30' and '2026-13-45' are not)
+  function isIsoDate(s) {
+    var m = typeof s === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (!m) return false;
+    var y = +m[1], mo = +m[2], d = +m[3];
+    var dt = new Date(Date.UTC(2000, mo - 1, d));
+    dt.setUTCFullYear(y);   // set separately: Date.UTC treats years 0-99 as 1900-1999
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+  }
 
   return { $: $, $$: $$, pad: pad, uid: uid, today: today, fmtDate: fmtDate, esc: esc, isIsoDate: isIsoDate };
 })();

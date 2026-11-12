@@ -43,7 +43,6 @@ CB.forms = (function () {
     var f = $('#page-check');
     f.reset();
     $('#p-type').value = 'Check';
-    $('#p-number').value = L.nextCheckNumber(CB.app.book);
     $('#p-date').value = CB.util.today();
     $('#p-address').textContent = '';
     updateNumberField();
@@ -75,7 +74,7 @@ CB.forms = (function () {
       $('#p-amount').value = M.plain(t.amount);
       $('#p-memo').value = t.memo;
       $('#p-address').textContent = payeeAddress(t.payee);
-      $('#p-num-label').textContent = t.type === 'Check' ? 'Check #' : 'Ref #';
+      updateNumberField();
       updateWords('p');
       splitsP.load(t.splits);
       setEditMode($('#page-check'), true);
@@ -117,8 +116,14 @@ CB.forms = (function () {
       var blank = !r.account && !r.amountRaw && !r.memo && !r.payee;
       return !(blank && all.length > 1); // ignore empty extra lines
     });
+    // A blank line memo/payee uses the transaction's own. When editing, a line memo/payee that just
+    // repeats the transaction's OLD memo/payee follows the edit too (so renaming the payee updates its lines).
+    var id = CB.app.editing[kind];
+    var existing = id ? L.getTxn(book, id) : null;
     var splits = rows.map(function (r) {
-      return { account: r.account, amount: r.amount, memo: r.memo || memo, payee: r.payee || payee };
+      var lineMemo = r.memo && !(existing && r.memo === existing.memo) ? r.memo : memo;
+      var linePayee = r.payee && !(existing && r.payee === existing.payee) ? r.payee : payee;
+      return { account: r.account, amount: r.amount, memo: lineMemo, payee: linePayee };
     });
 
     // the checks themselves live in CB.ledger.checkTxn (shared with Reconcile); here we just highlight fields
@@ -131,13 +136,10 @@ CB.forms = (function () {
     });
 
     if (errors.length) {
-      var uniq = errors.filter(function (m, i) { return errors.indexOf(m) === i; });
-      CB.dialog('Please Fix', '<ul><li>' + uniq.map(esc).join('</li><li>') + '</li></ul>');
+      CB.dialog.errors(errors);
       return false;
     }
 
-    var id = CB.app.editing[kind];
-    var existing = id ? L.getTxn(book, id) : null;
     // amount, date or kind of a reconciled item: warn first (memo, payee and accounts are fine)
     if (existing && CB.reconcile.changeNeedsWarning(existing, { amount: amount, date: date, kind: kind })) {
       CB.dialog('Reconciled Transaction', esc(CB.reconcile.warningFor(book, existing)) + '<br><br>Save the change anyway?',
@@ -162,8 +164,7 @@ CB.forms = (function () {
         Object.assign(txn, { type: type, number: number, date: date, payee: payee, amount: amount, memo: memo, splits: splits });
         message = 'Changes saved.';
       } else {
-        txn = { id: CB.util.uid(), seq: L.nextSeq(book), kind: kind, type: type, number: number, date: date, payee: payee,
-          amount: amount, memo: memo, cleared: false, reconciledId: null, splits: splits };
+        txn = L.newTxn(book, { kind: kind, type: type, number: number, date: date, payee: payee, amount: amount, memo: memo, splits: splits });
         book.transactions.push(txn);
         message = (kind === 'payment' ? type + ' ' : 'Deposit ') + M.format(amount) + (kind === 'payment' ? ' to ' : ' from ') + payee + ' recorded.';
       }

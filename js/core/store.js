@@ -9,6 +9,8 @@
      badly the screens can't draw it, refuse to save (saving would
      overwrite it). Saving only comes back on once a rescue copy
      exists, or the user confirms they have it as a downloaded file.
+   - If another CheckBook window saves, stop saving in this one
+     (its copy is out of date) until it is reloaded.
    ========================================================= */
 var CB = window.CB = window.CB || {};
 
@@ -22,6 +24,7 @@ CB.store = (function () {
   var state = {
     saveBlocked: false,   // true when saving would destroy data we can't read
     blockedRescued: false, // true once that blocked data has a rescue copy
+    otherWindow: false,   // true once another CheckBook window has saved (this one is out of date)
     warnings: []          // messages to show the user after load
   };
 
@@ -54,14 +57,14 @@ CB.store = (function () {
     var data;
     try { data = JSON.parse(raw); }
     catch (e) {
-      rescue(ls, raw);
+      if (!rescue(ls, raw)) return blockUnrescued('Your saved checkbook could not be read');
       state.warnings.push('Your saved checkbook could not be read, so a fresh one was started. ' +
         'The unreadable data was kept in a rescue copy inside this browser' + RECOVER_HINT + '. Open a backup file to restore your work.');
       return CB.schema.sampleBook();
     }
 
     if (!CB.schema.looksLikeBook(data)) {
-      rescue(ls, raw);
+      if (!rescue(ls, raw)) return blockUnrescued('The saved data did not look like a checkbook');
       state.warnings.push('The saved data did not look like a checkbook, so a fresh one was started. A rescue copy was kept' + RECOVER_HINT + '.');
       return CB.schema.sampleBook();
     }
@@ -101,14 +104,44 @@ CB.store = (function () {
     return CB.schema.blankBook();
   }
 
-  // Returns true if the copy was written.
+  // Unreadable saved data that could not be copied to a rescue key (e.g. storage full):
+  // starting fresh would overwrite the only copy, so saving is turned off instead.
+  function blockUnrescued(what) {
+    state.saveBlocked = true;
+    state.warnings.push(what + ', and CheckBook could not keep a rescue copy of it (this browser’s storage may be full). ' +
+      'It was not changed: saving is turned off so it is not overwritten.<br><br>' +
+      'To get back to work, open a backup with <b>File &gt; Open Backup</b>. CheckBook will download the unreadable data as a file first.');
+    return CB.schema.blankBook();
+  }
+
+  // Returns true if the copy was written (or an identical rescue copy already exists).
   function rescue(ls, raw) {
-    try { if (!ls) return false; ls.setItem(RESCUE_PREFIX + Date.now(), raw); return true; } catch (e) { return false; }
+    try {
+      if (!ls) return false;
+      // the same data is found again on every start while saving is blocked: don't fill storage with copies of it
+      for (var i = 0; i < ls.length; i++) {
+        var k = ls.key(i);
+        if (k && k.indexOf(RESCUE_PREFIX) === 0 && ls.getItem(k) === raw) return true;
+      }
+      ls.setItem(RESCUE_PREFIX + Date.now(), raw);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Another CheckBook window (or tab) saved: the book in this window is out of date, and saving it
+  // would wipe out that window's changes. Saving stops here until this window is reloaded.
+  function watchOtherWindows(onChange) {
+    window.addEventListener('storage', function (e) {
+      if (e.key !== KEY && e.key !== null) return;   // null: storage was cleared
+      if (state.otherWindow) return;
+      state.otherWindow = true;
+      onChange();
+    });
   }
 
   // Returns true if saved.
   function save(book) {
-    if (state.saveBlocked) return false;
+    if (state.saveBlocked || state.otherWindow) return false;
     var ls = storage();
     if (!ls) return false;
     try { ls.setItem(KEY, JSON.stringify(book)); return true; }
@@ -188,6 +221,8 @@ CB.store = (function () {
   return {
     KEY: KEY, load: load, save: save, parseBackup: parseBackup,
     get saveBlocked() { return state.saveBlocked; },
+    get otherWindow() { return state.otherWindow; },
+    watchOtherWindows: watchOtherWindows,
     blockedRaw: blockedRaw, keepRescue: keepRescue, unblock: unblock,
     listRescues: listRescues, readRescue: readRescue,
     get warnings() { return state.warnings.slice(); }

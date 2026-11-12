@@ -17,7 +17,7 @@ CB.reconcile = (function () {
   'use strict';
   var L = CB.ledger;
 
-  function isCents(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n; }
+  var isCents = CB.money.isCents;
   function isReconciled(t) { return t.reconciledId != null; }
 
   function lastReconciliation(book) {

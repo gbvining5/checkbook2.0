@@ -10,6 +10,9 @@ CB.money = (function () {
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
+  // Is n a whole number of cents (an integer)? The one check used everywhere.
+  function isCents(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n; }
+
   // Text the user typed -> cents (integer). Returns NaN if it isn't a valid amount.
   // Parses the text directly (no floating point), so "1.005" rounds correctly to 101.
   // Accepts: "150", "150.5", "$1,234.56", "-20"
@@ -70,5 +73,5 @@ CB.money = (function () {
     return parts.join(' ') + ' and ' + pad2(c) + '/100 Dollars';
   }
 
-  return { toCents: toCents, format: format, plain: plain, words: words };
+  return { isCents: isCents, toCents: toCents, format: format, plain: plain, words: words };
 })();

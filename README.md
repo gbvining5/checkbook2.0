@@ -14,7 +14,7 @@ A simple check register that runs in any web browser, styled like Windows 7 / ol
 ## How to run
 Open `index.html` in a browser. No install, no server, no internet needed.
 
-Or use the GitHub Pages link once it's turned on (see below).
+Or use the GitHub Pages link once it's turned on.
 
 ## Where the data lives
 Everything is saved in the browser's local storage on the computer you're using.

@@ -85,9 +85,10 @@ CB.main = (function () {
     // tell the user about anything that went wrong while loading
     var warnings = CB.store.warnings;
     if (warnings.length) CB.dialog('CheckBook', warnings.join('<br><br>'));
-    else if (CB.store.saveBlocked) CB.dialog('CheckBook', 'Saving is turned off.');
     // first save after an upgrade writes the new format
     if (!CB.store.saveBlocked) CB.app.save();
+    // another CheckBook window saving makes this one out of date: stop saving here and offer a reload
+    CB.store.watchOtherWindows(CB.app.otherWindowSaved);
   }
 
   return { start: start, showTab: showTab, runCommand: runCommand, about: showAbout };

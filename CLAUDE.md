@@ -27,10 +27,10 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
 | `js/core/util.js` | `$`, `esc`, dates, ids | no |
 | `js/core/money.js` | cents parsing/formatting, amount in words | no |
 | `js/core/schema.js` | data shape, `VERSION`, migrations, `validate()` | no |
-| `js/core/store.js` | load/save to localStorage safely, open backups, rescue copies, blocking saves for data it can't open | no |
-| `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction) — pure functions | no |
+| `js/core/store.js` | load/save to localStorage safely, open backups, rescue copies, blocking saves for data it can't open or once another window has saved | no |
+| `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction), `newTxn` (the shape of a new one) — pure functions | no |
 | `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish, hints, undo, report, reconciled-item warnings | no |
-| `js/ui/dialog.js` | message boxes, status bar | yes |
+| `js/ui/dialog.js` | message boxes (one at a time; others wait), `CB.dialog.errors()`, status bar | yes |
 | `js/ui/desktop.js` | desktop, windows (move/resize/min/max/close), taskbar | yes |
 | `js/checkbook/state.js` | `CB.app` — the open book + `commit()` | — |
 | `js/checkbook/register.js` | draws the register + balances | yes |
@@ -82,9 +82,6 @@ It is separate from the data format version (`CB.schema.VERSION`).
   No Node? Open `tests/unit.html` in a browser — it should say "All tests passed".
 - `npm run test:e2e` — clicks through the real app in a browser.
   First time: `npm install` then `npx playwright install chromium`.
-    If Playwright can't download Chromium (some sandboxes block it), run
-  `CHROME_PATH=/usr/bin/google-chrome npm run test:e2e` instead.
-  Don't change `playwright.config.js` or the tests to work around it.
 - GitHub runs both automatically on every push (`.github/workflows/test.yml`).
 - **Fixing a bug? Add a test that would have caught it** (`tests/unit.tests.js` or `tests/e2e.spec.js`).
 
