@@ -12,4 +12,4 @@
    This is NOT the data format version (that is CB.schema.VERSION).
    ========================================================= */
 var CB = window.CB = window.CB || {};
-CB.APP_VERSION = '2026.11.12-2';
+CB.APP_VERSION = '2026.11.12-3';

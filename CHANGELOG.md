@@ -2,6 +2,9 @@
 
 Newest first. One or two lines per change — what changed and why.
 
+## 2026.11.12-3 — Repository housekeeping
+- Added .gitignore (keeps node_modules, test output, zips and your CheckBook_ backups/CSV exports out of git) and the GitHub workflow (.github/workflows/test.yml) that CLAUDE.md already described; no app changes.
+
 ## 2026.11.12-2 — Safer handling of saved data this copy can't open
 - Before saved data from a newer version (or damaged data) is replaced, it is downloaded as a file and kept as a rescue copy; if the rescue copy can't be written (storage full), nothing is replaced unless you confirm you have the file.
 - Damaged saved data is no longer loaded at startup (it blanked the register on every start): saving is turned off, a rescue copy is kept, and you're told to open a backup. Backups are checked for the same, wider set of damage.

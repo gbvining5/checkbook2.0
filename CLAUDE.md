@@ -82,9 +82,6 @@ It is separate from the data format version (`CB.schema.VERSION`).
   No Node? Open `tests/unit.html` in a browser — it should say "All tests passed".
 - `npm run test:e2e` — clicks through the real app in a browser.
   First time: `npm install` then `npx playwright install chromium`.
-    If Playwright can't download Chromium (some sandboxes block it), run
-  `CHROME_PATH=/usr/bin/google-chrome npm run test:e2e` instead.
-  Don't change `playwright.config.js` or the tests to work around it.
 - GitHub runs both automatically on every push (`.github/workflows/test.yml`).
 - **Fixing a bug? Add a test that would have caught it** (`tests/unit.tests.js` or `tests/e2e.spec.js`).
 
