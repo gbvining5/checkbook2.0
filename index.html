@@ -45,6 +45,7 @@
         <button data-cmd="new">New Checkbook&hellip;</button>
         <button data-cmd="open">Open Backup&hellip;</button>
         <button data-cmd="save">Save Backup</button>
+        <button data-cmd="rescues">Recover Rescue Copies&hellip;</button>
         <hr>
         <button data-cmd="csv">Export to Excel (CSV)</button>
         <button data-cmd="print">Print Register</button>
@@ -374,6 +375,15 @@
           </div>
           <p class="rc-sub" id="rc-last"></p>
         </fieldset>
+        <fieldset class="group" id="rc-past" hidden>
+          <legend>Past statements</legend>
+          <div class="btn-row">
+            <select id="rc-past-sel" aria-label="Past statement"></select>
+            <button type="button" class="btn small" id="rc-past-view">View Report&hellip;</button>
+            <span class="rc-grow"></span>
+            <button type="button" class="btn small" id="rc-undo" title="Only the most recent reconciliation can be undone">Undo Last Reconciliation&hellip;</button>
+          </div>
+        </fieldset>
         <div class="edit-banner" id="rc-draft-note" hidden>You have an unfinished reconciliation saved.
           Click <b>Next</b> to continue it, or <b>Start Over</b> to throw it away.</div>
       </div>
@@ -455,6 +465,7 @@
         <span>Cleared total <b id="rc-t-cleared"></b></span>
         <span>Difference <b id="rc-t-diff"></b></span>
       </div>
+      <div class="rc-hints" id="rc-hints" hidden></div>
       <div class="rc-foot">
         <button type="button" class="btn" id="rc-add">Add Missing Item&hellip;</button>
         <button type="button" class="btn" id="rc-back">&lt; Back</button>
@@ -462,6 +473,16 @@
         <button type="button" class="btn default" id="rc-finish">Finish</button>
         <button type="button" class="btn" id="rc-leave">Leave Unfinished</button>
         <button type="button" class="btn js-rc-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Report (after Finish, or for a past statement) -->
+    <div class="rc-step" id="rc-step3" hidden>
+      <div class="rc-scroll"><div class="rc-report" id="rc-report"></div></div>
+      <div class="rc-foot">
+        <span class="rc-grow"></span>
+        <button type="button" class="btn default" id="rc-print">Print&hellip;</button>
+        <button type="button" class="btn" id="rc-report-done">Done</button>
       </div>
     </div>
 
@@ -486,6 +507,7 @@
     </div>
   </div>
   <div class="task-buttons" id="task-buttons"></div>
+  <div class="tray tray-version" id="app-version" title="This copy of CheckBook (Help &gt; About has details)"></div>
   <div class="tray"><span id="clock-time"></span><span id="clock-date"></span></div>
   <button class="show-desktop" id="show-desktop" title="Show desktop" aria-label="Show desktop"></button>
 </div>
@@ -506,6 +528,7 @@
 </div>
 
 <!-- Load order matters: core (no screen code) -> ui -> checkbook features -> main (starts the app) -->
+<script src="js/core/version.js"></script>
 <script src="js/core/util.js"></script>
 <script src="js/core/money.js"></script>
 <script src="js/core/schema.js"></script>

@@ -9,6 +9,7 @@ const vm = require('vm');
 const root = path.join(__dirname, '..');
 // Same order as index.html
 const files = [
+  'js/core/version.js',
   'js/core/util.js',
   'js/core/money.js',
   'js/core/schema.js',

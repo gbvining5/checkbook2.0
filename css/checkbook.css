@@ -376,3 +376,8 @@ select.listbox { height: auto; width: 100%; padding: 0; }
   .register th { position: static; }
   .register tbody { page-break-inside: avoid; }
 }
+
+/* File > Recover Rescue Copies list (inside a message box) */
+.rescue-list { border-collapse: collapse; margin-top: 8px; }
+.rescue-list td { padding: 3px 10px 3px 0; border-top: 1px solid #e1e6ec; }
+.rescue-list .num { text-align: right; color: #5f6f82; }

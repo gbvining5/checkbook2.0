@@ -174,11 +174,35 @@ CB.schema = (function () {
     return p;
   }
 
+  // Damage the screens cannot even draw (they would crash and leave the register blank).
+  // Returns a short description of the first such problem, or null. Call it AFTER migrate().
+  // Everything else validate() finds is shown as a warning instead.
+  function isObj(x) { return !!x && typeof x === 'object'; }
+  function findDamage(d) {
+    if (!isObj(d) || !isObj(d.settings)) return 'the settings are missing';
+    var lists = ['expenseAccounts', 'incomeAccounts', 'payees', 'transactions'];
+    for (var k = 0; k < lists.length; k++) {
+      if (!Array.isArray(d[lists[k]])) return 'the "' + lists[k] + '" list is missing';
+    }
+    var i, j, t;
+    for (i = 0; i < d.payees.length; i++) if (!isObj(d.payees[i])) return 'payee ' + (i + 1) + ' cannot be read';
+    for (i = 0; i < d.transactions.length; i++) {
+      t = d.transactions[i];
+      if (!isObj(t)) return 'transaction ' + (i + 1) + ' cannot be read';
+      if (!Array.isArray(t.splits)) return 'transaction ' + (i + 1) + ' has no account lines';
+      for (j = 0; j < t.splits.length; j++) if (!isObj(t.splits[j])) return 'transaction ' + (i + 1) + ' has an account line that cannot be read';
+    }
+    if (Array.isArray(d.reconciliations)) {
+      for (i = 0; i < d.reconciliations.length; i++) if (!isObj(d.reconciliations[i])) return 'reconciliation ' + (i + 1) + ' cannot be read';
+    }
+    return null;
+  }
+
   // Quick shape check (enough to recognise a CheckBook file at all)
   function looksLikeBook(d) {
     return !!(d && typeof d === 'object' && d.settings && Array.isArray(d.transactions));
   }
 
   return { VERSION: VERSION, blankBook: blankBook, sampleBook: sampleBook, migrate: migrate,
-    validate: validate, looksLikeBook: looksLikeBook };
+    validate: validate, looksLikeBook: looksLikeBook, findDamage: findDamage };
 })();

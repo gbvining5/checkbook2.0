@@ -23,12 +23,13 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
 ## File map (load order matters — see `index.html`)
 | File | Job | Touches screen? |
 |---|---|---|
+| `js/core/version.js` | `CB.APP_VERSION` — this copy's version (the release date) | no |
 | `js/core/util.js` | `$`, `esc`, dates, ids | no |
 | `js/core/money.js` | cents parsing/formatting, amount in words | no |
 | `js/core/schema.js` | data shape, `VERSION`, migrations, `validate()` | no |
-| `js/core/store.js` | load/save to localStorage safely, open backups | no |
+| `js/core/store.js` | load/save to localStorage safely, open backups, rescue copies, blocking saves for data it can't open | no |
 | `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction) — pure functions | no |
-| `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish | no |
+| `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish, hints, undo, report, reconciled-item warnings | no |
 | `js/ui/dialog.js` | message boxes, status bar | yes |
 | `js/ui/desktop.js` | desktop, windows (move/resize/min/max/close), taskbar | yes |
 | `js/checkbook/state.js` | `CB.app` — the open book + `commit()` | — |
@@ -67,6 +68,14 @@ so they can be unit tested.
 2. Add a desktop icon (`<button class="dicon" data-open="name">`) and a Start-menu entry.
 3. Put its code in its own file, e.g. `js/reports/reports.js`, and its styles in its own CSS file.
 4. Read data from `CB.app.book`; put calculations in `ledger.js` (or a new core file) with tests.
+
+## Releasing a version
+The version is the release date, `YEAR.MONTH.DAY` (e.g. `2026.11.12`; a second release that day is `2026.11.12-2`).
+1. Set it in `js/core/version.js`, `package.json` "version", and the top `## ` heading of `CHANGELOG.md`
+   (an e2e test fails if these don't match).
+2. Name the zip **and** the folder inside it `CheckBook-<version>` (e.g. `CheckBook-2026.11.12.zip`).
+The user sees it in the taskbar next to the clock and in Help > About.
+It is separate from the data format version (`CB.schema.VERSION`).
 
 ## Tests — run them after EVERY change
 - `npm test` — unit tests for money, balances, migrations, safe loading (Node, ~1 second).

@@ -122,11 +122,26 @@ CB.lists = (function () {
       return CB.dialog('Settings', 'Beginning balance must be a number, like 900000.00');
     }
     $('#s-begin').classList.remove('invalid');
-    var s = CB.app.book.settings;
-    s.company = $('#s-company').value.trim() || 'My Company';
-    s.bankAccount = $('#s-bank').value.trim();
-    s.beginningBalance = begin;
-    CB.app.commit('Settings saved.');
+    var book = CB.app.book;
+    var company = $('#s-company').value.trim() || 'My Company';
+    var bank = $('#s-bank').value.trim();
+    function save() {
+      var s = book.settings;
+      s.company = company;
+      s.bankAccount = bank;
+      s.beginningBalance = begin;
+      CB.app.commit('Settings saved.');
+    }
+    // the beginning balance feeds the first reconciliation: warn once anything is reconciled
+    var warning = begin !== book.settings.beginningBalance ? CB.reconcile.beginningBalanceWarning(book) : null;
+    if (!warning) return save();
+    CB.dialog('Beginning Balance', esc(warning) + '<br><br>Save the change anyway?',
+      [{ label: 'Save Anyway', value: true }, { label: 'Cancel', value: false, primary: true }]
+    ).then(function (ok) {
+      if (ok && CB.app.book === book) return save();
+      $('#s-begin').value = M.plain(book.settings.beginningBalance);   // put the old value back; nothing saved
+      CB.status('Settings not saved. The beginning balance is unchanged.');
+    });
   }
 
   function init() {

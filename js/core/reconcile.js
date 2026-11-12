@@ -7,8 +7,8 @@
      { statementDate: 'YYYY-MM-DD', endingBalance: cents, tickedIds: [transaction id] }
    (the same shape as book.reconcileDraft, which is a saved session).
 
-   Everything here is a pure function EXCEPT finish(), which applies a
-   finished reconciliation to the book it is given. Nothing here saves;
+   Everything here is a pure function EXCEPT finish() and undoLast(), which
+   change the book they are given. Nothing here saves;
    the screen calls CB.app.commit() afterwards.
    ========================================================= */
 var CB = window.CB = window.CB || {};
@@ -145,8 +145,159 @@ CB.reconcile = (function () {
     return a.tickedIds.slice().sort().join('\n') === b.tickedIds.slice().sort().join('\n');
   }
 
+  /* ---------- Part 2: help when it doesn't balance (pure) ---------- */
+  var MAX_HINT_ITEMS = 3;
+
+  function tickSet(book, session) {
+    var set = {};
+    cleanTicks(book, session.tickedIds).forEach(function (id) { set[id] = true; });
+    return set;
+  }
+
+  // Unticked items that would make the difference exactly 0 if ticked.
+  // (Ticking t changes the difference by -signed(t), so we need signed(t) === difference.)
+  function hintUnticked(book, session) {
+    var diff = difference(book, session);
+    if (diff === 0) return [];
+    var ticked = tickSet(book, session);
+    return unreconciled(book).filter(function (t) { return !ticked[t.id] && L.signed(t) === diff; });
+  }
+
+  // Ticked items that would make the difference exactly 0 if they were the other kind
+  // (a payment entered as a deposit, or the reverse, is off by twice its amount).
+  function hintReversed(book, session) {
+    var diff = difference(book, session);
+    if (diff === 0) return [];
+    var ticked = tickSet(book, session);
+    return unreconciled(book).filter(function (t) { return ticked[t.id] && -2 * L.signed(t) === diff; });
+  }
+
+  // Swapped digits (45 vs 54) always make a difference that divides evenly by 9.
+  // Weak signal: about 1 in 9 unrelated differences also divide by 9.
+  function hintTransposed(diff) {
+    return isCents(diff) && diff !== 0 && Math.abs(diff) % 9 === 0;
+  }
+
+  function itemLabel(t) { return t.payee + ', ' + CB.money.format(t.amount) + ' (' + CB.util.fmtDate(t.date) + ')'; }
+
+  // Plain-text hints to show under the totals ([] when it balances). The screen escapes them.
+  function hints(book, session) {
+    var diff = difference(book, session);
+    if (!isCents(diff) || diff === 0) return [];
+    var out = [];
+    hintUnticked(book, session).slice(0, MAX_HINT_ITEMS).forEach(function (t) {
+      out.push({ rule: 'unticked', id: t.id, text: 'Did ' + itemLabel(t) + ' clear?' +
+        (t.date > session.statementDate ? ' (It is dated after the statement; tick “Show later dates too” to see it.)' : '') });
+    });
+    hintReversed(book, session).slice(0, MAX_HINT_ITEMS).forEach(function (t) {
+      out.push({ rule: 'reversed', id: t.id, text: 'Check that ' + itemLabel(t) + ' isn’t entered as a ' +
+        (t.kind === 'deposit' ? 'deposit instead of a payment.' : 'payment instead of a deposit.') });
+    });
+    if (hintTransposed(diff)) out.push({ rule: 'transposed', id: null, text: 'Two digits may be swapped (like 45 vs 54).' });
+    return out;
+  }
+
+  /* ---------- Part 2: undo the most recent reconciliation ---------- */
+  function findReconciliation(book, recId) {
+    var r = book.reconciliations || [];
+    for (var i = 0; i < r.length; i++) if (r[i].id === recId) return r[i];
+    return null;
+  }
+
+  // -> { ok: true } or { ok: false, reason }. Only the most recent one, and not while one is unfinished.
+  function canUndo(book, recId) {
+    var last = lastReconciliation(book);
+    if (!last) return { ok: false, reason: 'There is no reconciliation to undo.' };
+    if (last.id !== recId) return { ok: false, reason: 'Only the most recent reconciliation can be undone.' };
+    if (book.reconcileDraft) return { ok: false, reason: 'Finish or Start Over the unfinished reconciliation first.' };
+    return { ok: true };
+  }
+
+  // Put the items back to cleared-but-not-reconciled and remove the record.
+  // CHANGES the book. Throws (and changes nothing) unless canUndo() is ok.
+  function undoLast(book, recId) {
+    var check = canUndo(book, recId);
+    if (!check.ok) throw new Error(check.reason);
+    var rec = book.reconciliations.pop();
+    book.transactions.forEach(function (t) {
+      if (t.reconciledId === rec.id) { t.reconciledId = null; t.cleared = true; }
+    });
+    return rec;
+  }
+
+  /* ---------- Part 2: report (pure) ---------- */
+  // Rebuilt from the book as it is now (no snapshot is stored), so it also reports
+  // items deleted since and any amount by which it no longer adds up.
+  function report(book, recId) {
+    var recs = book.reconciliations || [];
+    var rec = findReconciliation(book, recId);
+    if (!rec) return null;
+    var order = {};
+    recs.forEach(function (r, i) { order[r.id] = i; });
+    var idx = order[rec.id];
+    var pay = { count: 0, total: 0 }, dep = { count: 0, total: 0 };
+    var outstanding = [];
+    L.sorted(book).forEach(function (t) {
+      if (t.reconciledId === rec.id) {
+        var g = t.kind === 'deposit' ? dep : pay;
+        g.count++; g.total += t.amount;
+      } else if (t.date <= rec.statementDate && !(t.reconciledId != null && order[t.reconciledId] < idx)) {
+        outstanding.push(t);   // not reconciled by this statement or an earlier one
+      }
+    });
+    var deleted = (rec.transactionIds || []).filter(function (id) { return !L.getTxn(book, id); }).length;
+    return {
+      id: rec.id, statementDate: rec.statementDate, finishedAt: rec.finishedAt,
+      openingBalance: rec.openingBalance, endingBalance: rec.endingBalance,
+      payments: pay, deposits: dep, outstanding: outstanding,
+      deletedCount: deleted,
+      offBy: rec.endingBalance - (rec.openingBalance + dep.total - pay.total)   // 0 unless something changed since
+    };
+  }
+
+  /* ---------- Part 2: protecting reconciled transactions (pure) ---------- */
+  // Does saving these changes to t need the warning? Only amount, date and kind count.
+  function changeNeedsWarning(t, changes) {
+    if (!t || !isReconciled(t)) return false;
+    return (changes.amount !== undefined && changes.amount !== t.amount) ||
+           (changes.date !== undefined && changes.date !== t.date) ||
+           (changes.kind !== undefined && changes.kind !== t.kind);
+  }
+
+  // ISO date-time -> local YYYY-MM-DD ('' if unreadable)
+  function localDay(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + CB.util.pad(d.getMonth() + 1) + '-' + CB.util.pad(d.getDate());
+  }
+
+  function whenText(rec) {
+    var day = localDay(rec.finishedAt);
+    var stmt = 'statement dated ' + CB.util.fmtDate(rec.statementDate);
+    return day ? CB.util.fmtDate(day) + ' (' + stmt + ')' : 'the ' + stmt;
+  }
+
+  // Plain-text warning for changing/deleting a reconciled transaction (null if it isn't reconciled)
+  function warningFor(book, t) {
+    if (!t || !isReconciled(t)) return null;
+    var rec = findReconciliation(book, t.reconciledId);
+    return 'This was reconciled on ' + (rec ? whenText(rec) : 'an earlier statement') +
+      '. Changing it will make that reconciliation wrong.';
+  }
+
+  // Plain-text warning for changing the beginning balance (null if nothing is reconciled yet).
+  // The first reconciliation is the one whose opening balance came from the beginning balance.
+  function beginningBalanceWarning(book) {
+    var r = book.reconciliations || [];
+    if (!r.length) return null;
+    return 'This checkbook was reconciled on ' + whenText(r[0]) + '. Changing the beginning balance will make that reconciliation wrong.';
+  }
+
   return { isReconciled: isReconciled, lastReconciliation: lastReconciliation, openingBalance: openingBalance,
     cleanTicks: cleanTicks, initialTicks: initialTicks, candidates: candidates, clearedTotal: clearedTotal,
     difference: difference, checkStart: checkStart, canFinish: canFinish, finish: finish,
-    makeDraft: makeDraft, resume: resume, sameSession: sameSession };
+    makeDraft: makeDraft, resume: resume, sameSession: sameSession,
+    hintUnticked: hintUnticked, hintReversed: hintReversed, hintTransposed: hintTransposed, hints: hints,
+    findReconciliation: findReconciliation, canUndo: canUndo, undoLast: undoLast, report: report,
+    changeNeedsWarning: changeNeedsWarning, warningFor: warningFor, beginningBalanceWarning: beginningBalanceWarning };
 })();

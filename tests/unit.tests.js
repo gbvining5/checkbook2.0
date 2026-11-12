@@ -164,12 +164,15 @@ test('data from a NEWER app version is refused, not damaged', function () {
 });
 
 /* ---------------- store: loading & saving safely ---------------- */
-function withFakeStorage(initial, fn) {
+// refuse(key) -> true makes setItem throw for that key (like a full browser storage)
+function withFakeStorage(initial, fn, refuse) {
   var data = Object.assign({}, initial);
   var fake = {
     getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-    setItem: function (k, v) { data[k] = String(v); },
-    removeItem: function (k) { delete data[k]; }
+    setItem: function (k, v) { if (refuse && refuse(k)) throw new Error('QuotaExceededError'); data[k] = String(v); },
+    removeItem: function (k) { delete data[k]; },
+    key: function (i) { return Object.keys(data)[i] || null; },
+    get length() { return Object.keys(data).length; }
   };
   var real = Object.getOwnPropertyDescriptor(window, 'localStorage');
   Object.defineProperty(window, 'localStorage', { value: fake, configurable: true });
@@ -215,8 +218,115 @@ test('data from a newer version blocks saving so it is not overwritten', functio
     ok(CB.store.saveBlocked, 'saving should be blocked');
     eq(CB.store.save(CB.schema.blankBook()), false);
     eq(JSON.parse(data[CB.store.KEY]).version, 99, 'newer data must be untouched');
-    CB.store.unblock();
+    CB.store.unblock(true);
   });
+});
+
+function rescueKeys(data, value) {
+  return Object.keys(data).filter(function (k) { return k.indexOf('checkbook.rescue.') === 0 && (value === undefined || data[k] === value); });
+}
+
+test('saving stays off until the newer data has a rescue copy', function () {
+  var newer = JSON.stringify({ version: 99, settings: { company: 'Future' }, transactions: [] });
+  var init = {}; init[CB.store.KEY] = newer;
+  withFakeStorage(init, function (data) {
+    CB.store.load();
+    eq(CB.store.blockedRaw(), newer);
+    eq(CB.store.unblock(), false, 'no rescue copy yet: refuse');
+    eq(CB.store.save(CB.schema.blankBook()), false);
+    ok(CB.store.keepRescue());
+    eq(rescueKeys(data, newer).length, 1, 'the newer data survives in a rescue copy');
+    ok(CB.store.keepRescue(), 'asking again does not make a second copy');
+    eq(rescueKeys(data).length, 1);
+    eq(CB.store.unblock(), true);
+    ok(CB.store.save(CB.schema.blankBook()), 'saving works again');
+  });
+});
+
+test('if the rescue copy cannot be written (storage full), the newer data is not overwritten', function () {
+  var newer = JSON.stringify({ version: 99, settings: { company: 'Future' }, transactions: [] });
+  var init = {}; init[CB.store.KEY] = newer;
+  withFakeStorage(init, function (data) {
+    CB.store.load();
+    eq(CB.store.keepRescue(), false, 'rescue copy failed');
+    eq(CB.store.unblock(), false, 'so saving stays off');
+    eq(CB.store.save(CB.schema.blankBook()), false);
+    eq(data[CB.store.KEY], newer, 'newer data untouched');
+    eq(CB.store.unblock(true), true, 'only once the user confirms they have the downloaded file');
+  }, function (k) { return k.indexOf('checkbook.rescue.') === 0; });
+});
+
+test('findDamage: only damage the screens cannot draw', function () {
+  var D = CB.schema.findDamage;
+  function damaged(f) { var b = CB.schema.sampleBook(); f(b); return D(b); }
+  eq(D(CB.schema.sampleBook()), null);
+  eq(damaged(function (b) { b.transactions.push(null); }), 'transaction 3 cannot be read');
+  eq(damaged(function (b) { delete b.transactions[0].splits; }), 'transaction 1 has no account lines');
+  eq(damaged(function (b) { b.transactions[1].splits = [null]; }), 'transaction 2 has an account line that cannot be read');
+  eq(damaged(function (b) { b.payees.push(null); }), 'payee ' + (CB.schema.sampleBook().payees.length + 1) + ' cannot be read');
+  eq(damaged(function (b) { delete b.payees; }), 'the "payees" list is missing');
+  eq(damaged(function (b) { delete b.expenseAccounts; }), 'the "expenseAccounts" list is missing');
+  eq(damaged(function (b) { b.reconciliations.push(5); }), 'reconciliation 1 cannot be read');
+  // these are warnings (validate), not damage: the screens cope with them
+  eq(damaged(function (b) { b.transactions[0].date = 'xx'; }), null);
+  eq(damaged(function (b) { b.transactions[0].amount = 1; }), null);
+  eq(damaged(function (b) { delete b.reconciliations; }), null);
+});
+
+test('damaged saved data is not shown or overwritten: saving off, rescue copy kept', function () {
+  var b = CB.schema.sampleBook(); b.transactions.push(null);
+  var raw = JSON.stringify(b);
+  var init = {}; init[CB.store.KEY] = raw;
+  withFakeStorage(init, function (data) {
+    var loaded = CB.store.load();
+    eq(loaded.transactions, [], 'a blank stand-in is shown');
+    ok(CB.store.saveBlocked);
+    eq(CB.store.save(CB.schema.blankBook()), false);
+    eq(data[CB.store.KEY], raw, 'stored data untouched');
+    eq(rescueKeys(data, raw).length, 1);
+    ok(/damaged \(transaction 3 cannot be read\)/.test(CB.store.warnings[0]), CB.store.warnings[0]);
+    eq(CB.store.unblock(), true, 'it already has a rescue copy');
+  });
+});
+
+test('old-version data whose upgrade crashes on a damaged entry is reported as damaged', function () {
+  var v1 = { version: 1, settings: { company: 'A', bankAccount: '', beginningBalance: 0 }, expenseAccounts: [], incomeAccounts: [], payees: [], transactions: [null] };
+  var init = {}; init[CB.store.KEY] = JSON.stringify(v1);
+  withFakeStorage(init, function () {
+    CB.store.load();
+    ok(CB.store.saveBlocked);
+    ok(/damaged \(it cannot be upgraded\)/.test(CB.store.warnings[0]), CB.store.warnings[0]);
+    CB.store.unblock(true);
+  });
+  ok(/damaged/.test(throws(function () { CB.store.parseBackup(JSON.stringify(v1)); }).message));
+});
+
+test('rescue copies are listed newest first and only they can be read back', function () {
+  var init = { 'checkbook.rescue.1000': 'old', 'checkbook.rescue.3000': 'new', 'checkbook.before-upgrade.v2': 'v2', other: 'x' };
+  init[CB.store.KEY] = '{}';
+  withFakeStorage(init, function () {
+    eq(CB.store.listRescues().map(function (r) { return [r.key, r.kind]; }),
+      [['checkbook.rescue.3000', 'rescue'], ['checkbook.rescue.1000', 'rescue'], ['checkbook.before-upgrade.v2', 'before-upgrade']]);
+    eq(CB.store.listRescues()[0].time, 3000);
+    eq(CB.store.readRescue('checkbook.rescue.1000'), 'old');
+    eq(CB.store.readRescue('other'), null);
+    eq(CB.store.readRescue(CB.store.KEY), null);
+  });
+});
+
+test('parseBackup refuses damaged entries that would blank the register', function () {
+  var b = CB.schema.sampleBook();
+  b.transactions.push(null);
+  ok(/damaged/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));
+  b = CB.schema.sampleBook();
+  delete b.transactions[0].splits;
+  ok(/damaged/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));  // these crashed the screens too, but got through the first fix
+  b = CB.schema.sampleBook(); b.transactions[0].splits = [null];
+  ok(/damaged \(transaction 1 has an account line/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));
+  b = CB.schema.sampleBook(); b.payees.push(null);
+  ok(/damaged/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));
+  b = CB.schema.sampleBook(); delete b.expenseAccounts;
+  ok(/damaged/.test(throws(function () { CB.store.parseBackup(JSON.stringify(b)); }).message));
 });
 
 test('parseBackup rejects files that are not checkbooks', function () {
@@ -432,6 +542,153 @@ test('validate catches broken reconciliation data', function () {
   b.reconcileDraft = { statementDate: '2026-01-31', endingBalance: 'abc', tickedIds: [] };
   var p = CB.schema.validate(b).join(' | ');
   ok(/does not exist/.test(p) && /bad statement date/.test(p) && /whole number of cents/.test(p) && /unfinished reconciliation/.test(p), p);
+});
+
+/* ---------------- reconcile part 2: hints ---------------- */
+function hintIds(list) { return list.map(function (t) { return t.id; }); }
+
+test('hint 1: difference equals one unticked item (and in the right direction)', function () {
+  var b = recBook();
+  var s = { statementDate: '2026-01-31', endingBalance: 90000, tickedIds: ['t0'] };   // the $50 deposit t1 is not ticked
+  eq(hintIds(R.hintUnticked(b, s)), ['t1']);
+  var h = R.hints(b, s).filter(function (x) { return x.rule === 'unticked'; });
+  eq(h.length, 1);
+  eq(h[0].text, 'Did X, $50.00 (01/20/2026) clear?');
+  s.endingBalance = 90001;                                                            // off by 50.01: no item matches
+  eq(R.hintUnticked(b, s), []);
+  s.endingBalance = 80000;                                                            // off by -50.00: a deposit can't fix that
+  eq(R.hintUnticked(b, s), []);
+  s = { statementDate: '2026-01-31', endingBalance: 90000, tickedIds: ['t0', 't1'] }; // balances: no hints at all
+  eq(R.hints(b, s), []);
+});
+
+test('hint 1 never suggests an item that is already reconciled', function () {
+  var b = recBook();
+  b.transactions[1].reconciledId = 'old';
+  b.reconciliations.push({ id: 'old', statementDate: '2025-12-31', openingBalance: 0, endingBalance: 100000, transactionIds: ['t1'], finishedAt: '' });
+  eq(R.hintUnticked(b, { statementDate: '2026-01-31', endingBalance: 105000, tickedIds: [] }), []);
+});
+
+test('hint 2: difference equals twice a ticked item (entered as the wrong kind)', function () {
+  var b = recBook();
+  // bank treated the $50 as a payment: 1000 - 150 - 50 = 800, but the register has it as a deposit
+  var s = { statementDate: '2026-01-31', endingBalance: 80000, tickedIds: ['t0', 't1'] };
+  eq(hintIds(R.hintReversed(b, s)), ['t1']);
+  var h = R.hints(b, s).filter(function (x) { return x.rule === 'reversed'; });
+  eq(h[0].text, 'Check that X, $50.00 (01/20/2026) isn’t entered as a deposit instead of a payment.');
+  s.endingBalance = 80001;
+  eq(R.hintReversed(b, s), [], 'not exactly twice');
+  s.endingBalance = 100000;                                    // +100.00 is twice $50 but in the wrong direction
+  eq(R.hintReversed(b, s), []);
+  // an UNticked item can't cause a doubled difference
+  eq(R.hintReversed(b, { statementDate: '2026-01-31', endingBalance: 75000, tickedIds: ['t0'] }), []);
+  // a ticked payment that should have been a deposit
+  eq(hintIds(R.hintReversed(b, { statementDate: '2026-01-31', endingBalance: 120000, tickedIds: ['t0', 't1'] })), ['t0']);
+});
+
+test('hint 3: difference divisible by 9 suggests swapped digits', function () {
+  eq(R.hintTransposed(900), true, '$54.00 entered as $45.00');
+  eq(R.hintTransposed(-900), true);
+  eq(R.hintTransposed(27), true, '0.72 vs 0.45... any multiple of 9 cents');
+  eq(R.hintTransposed(0), false);
+  eq(R.hintTransposed(10), false);
+  eq(R.hintTransposed(901), false);
+  var b = recBook();
+  var h = R.hints(b, { statementDate: '2026-01-31', endingBalance: 90900, tickedIds: ['t0', 't1'] });   // off by $9.00
+  eq(h.map(function (x) { return x.rule; }), ['transposed']);
+  eq(h[0].text, 'Two digits may be swapped (like 45 vs 54).');
+  eq(R.hints(b, { statementDate: '2026-01-31', endingBalance: 90010, tickedIds: ['t0', 't1'] }), [], 'off by 10 cents: no hint');
+});
+
+/* ---------------- reconcile part 2: undo ---------------- */
+function twoRecs() {
+  var b = recBook();
+  R.finish(b, { statementDate: '2026-01-31', endingBalance: 90000, tickedIds: ['t0', 't1'] }, 'r1', '2026-02-02T15:00:00.000Z');
+  R.finish(b, { statementDate: '2026-02-28', endingBalance: 87500, tickedIds: ['t2'] }, 'r2', '2026-03-02T15:00:00.000Z');
+  return b;
+}
+
+test('undo only works on the most recent reconciliation', function () {
+  var b = twoRecs();
+  var before = JSON.stringify(b);
+  eq(R.canUndo(b, 'r1').ok, false);
+  throws(function () { R.undoLast(b, 'r1'); });
+  throws(function () { R.undoLast(b, 'nope'); });
+  eq(JSON.stringify(b), before, 'refused undo changes nothing');
+
+  var rec = R.undoLast(b, 'r2');
+  eq(rec.id, 'r2');
+  eq(b.reconciliations.map(function (r) { return r.id; }), ['r1']);
+  eq([b.transactions[2].reconciledId, b.transactions[2].cleared], [null, true], 'back to cleared, not reconciled');
+  eq([b.transactions[0].reconciledId, b.transactions[1].reconciledId], ['r1', 'r1'], 'earlier one untouched');
+  eq(R.openingBalance(b), 90000);
+  eq(CB.schema.validate(b), []);
+  eq(R.canUndo(b, 'r1').ok, true, 'r1 is now the most recent');
+  R.undoLast(b, 'r1');
+  eq(b.reconciliations, []);
+  eq(R.canUndo(b, 'r1').ok, false, 'nothing left to undo');
+});
+
+test('undo is refused while an unfinished reconciliation is saved', function () {
+  var b = twoRecs();
+  b.reconcileDraft = { statementDate: '2026-03-31', endingBalance: 1, tickedIds: [] };
+  eq(R.canUndo(b, 'r2').ok, false);
+  throws(function () { R.undoLast(b, 'r2'); });
+  eq(b.reconciliations.length, 2);
+});
+
+/* ---------------- reconcile part 2: report ---------------- */
+test('report totals: cleared payments/deposits, outstanding items, and it adds up', function () {
+  var b = recBook();
+  b.transactions.push(Object.assign({}, b.transactions[0], { id: 't3', seq: 4, amount: 1000, date: '2026-01-25', cleared: false,
+    splits: [{ account: 'Maint.', amount: 1000, memo: '', payee: 'X' }] }));
+  b.transactions.push(Object.assign({}, b.transactions[0], { id: 't4', seq: 5, amount: 700, date: '2026-01-26', cleared: false,
+    splits: [{ account: 'Maint.', amount: 700, memo: '', payee: 'X' }] }));
+  R.finish(b, { statementDate: '2026-01-31', endingBalance: 89300, tickedIds: ['t0', 't1', 't4'] }, 'r1', '2026-02-02T15:00:00.000Z');
+  var r = R.report(b, 'r1');
+  eq([r.statementDate, r.openingBalance, r.endingBalance], ['2026-01-31', 100000, 89300]);
+  eq(r.payments, { count: 2, total: 15700 });
+  eq(r.deposits, { count: 1, total: 5000 });
+  eq(hintIds(r.outstanding), ['t3'], 'unticked and on/before the statement date; t2 is dated later');
+  eq([r.offBy, r.deletedCount], [0, 0]);
+
+  // a later statement reconciles t3: the first report still lists it as outstanding back then
+  R.finish(b, { statementDate: '2026-02-28', endingBalance: 85800, tickedIds: ['t2', 't3'] }, 'r2', '2026-03-02T15:00:00.000Z');
+  eq(hintIds(R.report(b, 'r1').outstanding), ['t3']);
+  var r2 = R.report(b, 'r2');
+  eq([r2.openingBalance, r2.payments, r2.deposits, r2.outstanding, r2.offBy], [89300, { count: 2, total: 3500 }, { count: 0, total: 0 }, [], 0]);
+  eq(R.report(b, 'nope'), null);
+});
+
+test('report shows when a past reconciliation no longer adds up', function () {
+  var b = twoRecs();
+  b.transactions[0].amount = 15100;   // edited after the warning
+  b.transactions = b.transactions.filter(function (t) { return t.id !== 't1'; });   // deleted after the warning
+  var r = R.report(b, 'r1');
+  eq(r.deletedCount, 1);
+  eq(r.payments, { count: 1, total: 15100 });
+  eq(r.offBy, 90000 - (100000 - 15100));
+});
+
+/* ---------------- reconcile part 2: protecting reconciled items ---------------- */
+test('only amount, date or kind changes to a reconciled item need the warning', function () {
+  var b = twoRecs();
+  var t = b.transactions[0];
+  ok(R.changeNeedsWarning(t, { amount: 15001 }), 'amount');
+  ok(R.changeNeedsWarning(t, { date: '2026-01-11' }), 'date');
+  ok(R.changeNeedsWarning(t, { kind: 'deposit' }), 'kind');
+  ok(!R.changeNeedsWarning(t, { amount: 15000, date: '2026-01-10', kind: 'payment', memo: 'new', payee: 'Y' }), 'memo/payee/same values');
+  ok(!R.changeNeedsWarning(recBook().transactions[0], { amount: 1 }), 'not reconciled');
+  ok(/^This was reconciled on \d\d\/\d\d\/2026 \(statement dated 01\/31\/2026\)\. Changing it will make that reconciliation wrong\.$/.test(R.warningFor(b, t)), R.warningFor(b, t));
+  eq(R.warningFor(b, recBook().transactions[0]), null);
+  eq(R.beginningBalanceWarning(recBook()), null);
+  ok(/statement dated 01\/31\/2026/.test(R.beginningBalanceWarning(b)), 'uses the first reconciliation');
+});
+
+/* ---------------- app version ---------------- */
+test('app version is the release date (YEAR.MONTH.DAY, optional -N)', function () {
+  ok(/^\d{4}\.\d{2}\.\d{2}(-\d+)?$/.test(CB.APP_VERSION), CB.APP_VERSION);
+  ok(CB.util.isIsoDate(CB.APP_VERSION.slice(0, 10).replace(/\./g, '-')), 'a real date');
 });
 
 /* ---------------- safety ---------------- */

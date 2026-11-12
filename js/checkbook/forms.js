@@ -136,27 +136,42 @@ CB.forms = (function () {
       return false;
     }
 
-    // remember new payees automatically
-    CB.lists.ensurePayee(payee);
-    splits.forEach(function (s) { CB.lists.ensurePayee(s.payee); });
-
     var id = CB.app.editing[kind];
-    var txn, message;
-    if (id) {
-      txn = L.getTxn(book, id);
-      Object.assign(txn, { type: type, number: number, date: date, payee: payee, amount: amount, memo: memo, splits: splits });
-      message = 'Changes saved.';
-    } else {
-      txn = { id: CB.util.uid(), seq: L.nextSeq(book), kind: kind, type: type, number: number, date: date, payee: payee,
-        amount: amount, memo: memo, cleared: false, reconciledId: null, splits: splits };
-      book.transactions.push(txn);
-      message = (kind === 'payment' ? type + ' ' : 'Deposit ') + M.format(amount) + (kind === 'payment' ? ' to ' : ' from ') + payee + ' recorded.';
+    var existing = id ? L.getTxn(book, id) : null;
+    // amount, date or kind of a reconciled item: warn first (memo, payee and accounts are fine)
+    if (existing && CB.reconcile.changeNeedsWarning(existing, { amount: amount, date: date, kind: kind })) {
+      CB.dialog('Reconciled Transaction', esc(CB.reconcile.warningFor(book, existing)) + '<br><br>Save the change anyway?',
+        [{ label: 'Save Anyway', value: true }, { label: 'Cancel', value: false, primary: true }]
+      ).then(function (ok) {
+        if (ok && CB.app.book === book && L.getTxn(book, id) === existing) save();
+        else CB.status('Not saved. The reconciled transaction is unchanged.');
+      });
+      return false;
     }
-    CB.app.selectedId = txn.id;
-    CB.app.commit(message);
-    if (kind === 'payment') resetPayment(); else resetDeposit();
-    CB.register.scrollToSelected();
+    save();
     return true;
+
+    function save() {
+      // remember new payees automatically
+      CB.lists.ensurePayee(payee);
+      splits.forEach(function (s) { CB.lists.ensurePayee(s.payee); });
+
+      var txn, message;
+      if (id) {
+        txn = L.getTxn(book, id);
+        Object.assign(txn, { type: type, number: number, date: date, payee: payee, amount: amount, memo: memo, splits: splits });
+        message = 'Changes saved.';
+      } else {
+        txn = { id: CB.util.uid(), seq: L.nextSeq(book), kind: kind, type: type, number: number, date: date, payee: payee,
+          amount: amount, memo: memo, cleared: false, reconciledId: null, splits: splits };
+        book.transactions.push(txn);
+        message = (kind === 'payment' ? type + ' ' : 'Deposit ') + M.format(amount) + (kind === 'payment' ? ' to ' : ' from ') + payee + ' recorded.';
+      }
+      CB.app.selectedId = txn.id;
+      CB.app.commit(message);
+      if (kind === 'payment') resetPayment(); else resetDeposit();
+      CB.register.scrollToSelected();
+    }
   }
 
   /* ---------- delete ---------- */
@@ -164,10 +179,12 @@ CB.forms = (function () {
     var book = CB.app.book;
     var t = CB.app.selectedId && L.getTxn(book, CB.app.selectedId);
     if (!t) { CB.dialog('Delete', 'Click a transaction in the register first, then choose Delete.'); return; }
+    var warning = CB.reconcile.warningFor(book, t);   // null unless it is reconciled
     CB.dialog('Delete Transaction',
+      (warning ? '<div class="edit-banner">' + esc(warning) + '</div><br>' : '') +
       'Delete this transaction?<br><br><b>' + esc(CB.util.fmtDate(t.date)) + ' &nbsp; ' + esc(L.numberLabel(t)) + ' &nbsp; ' + esc(t.payee) +
       ' &nbsp; ' + M.format(t.amount) + '</b><br><br>This cannot be undone.',
-      [{ label: 'Delete', value: true, primary: true }, { label: 'Cancel', value: false }]
+      [{ label: 'Delete', value: true, primary: !warning }, { label: 'Cancel', value: false, primary: !!warning }]
     ).then(function (ok) {
       if (!ok) return;
       book.transactions = book.transactions.filter(function (x) { return x.id !== t.id; });

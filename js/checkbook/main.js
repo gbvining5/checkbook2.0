@@ -19,7 +19,7 @@ CB.main = (function () {
       '<b>CheckBook</b> &mdash; a simple check register.<br>' +
       'Works offline in any web browser. No account or internet needed.<br><br>' +
       'Data is stored in this browser only. Use <b>Save Backup</b> to keep a copy.<br>' +
-      '<span style="color:#666">Data format version ' + CB.schema.VERSION + '</span>');
+      '<span style="color:#666">Version <b id="about-version">' + CB.util.esc(CB.APP_VERSION) + '</b> &nbsp;&middot;&nbsp; Data format version ' + CB.schema.VERSION + '</span>');
   }
 
   // Every menu item / toolbar button has data-cmd="..." and lands here
@@ -35,6 +35,7 @@ CB.main = (function () {
       case 'csv': CB.files.exportCsv(); break;
       case 'print': window.print(); break;
       case 'new': CB.files.newCheckbook(); break;
+      case 'rescues': CB.files.showRescues(); break;
       case 'lists': showTab('lists'); break;
       case 'settings': showTab('settings'); break;
       case 'help': if (window.Desktop) Desktop.open('help'); break;
@@ -69,6 +70,7 @@ CB.main = (function () {
 
   function start() {
     CB.app.book = CB.store.load();
+    $('#app-version').textContent = 'Version ' + CB.APP_VERSION;   // taskbar, next to the clock
     bindChrome();
     CB.register.init();
     CB.forms.init();

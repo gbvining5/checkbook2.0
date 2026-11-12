@@ -49,16 +49,19 @@ CB.app = (function () {
     if (message) CB.status(message);
   };
 
-  // Replace the whole book (open backup / new checkbook)
-  app.replaceBook = function (book) {
+  // Replace the whole book (open backup / new checkbook).
+  // If saving is blocked, call CB.files.protectStored() first: this refuses (returns false,
+  // nothing changes) unless the stored data has a rescue copy or `confirmed` is true.
+  app.replaceBook = function (book, confirmed) {
+    if (!CB.store.unblock(confirmed)) return false;
     app.book = book;
     app.selectedId = null;
-    CB.store.unblock();
     saveWarned = false;
     app.save();
     app.renderAll();
     CB.forms.resetPayment();
     CB.forms.resetDeposit();
+    return true;
   };
 
   return app;

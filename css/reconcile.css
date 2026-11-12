@@ -67,4 +67,40 @@
 .ico-rec { background: linear-gradient(#e6f5e0, #8fcf78); border: 1px solid #3c8a25; }
 .ico-rec::after { content: "\2713"; position: absolute; inset: 0; font: bold 12px/14px Arial; color: #1d5a10; text-align: center; }
 
-@media print { #win-reconcile { display: none !important; } }
+/* help when it doesn't balance */
+.rc-hints { padding: 6px 10px; border-top: 1px solid #e3c55a; background: #fff8dc; color: #5a4300; }
+.rc-hints ul { margin: 3px 0 0; padding-left: 18px; }
+
+/* past statements (Step 1) */
+#rc-past .btn-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#rc-past select { max-width: 100%; }
+
+/* report (Step 3) */
+.rc-report { background: #fff; border: 1px solid #c5ccd4; padding: 12px 14px; max-width: 640px; }
+.rc-report h2 { margin: 0 0 2px; font-size: 16px; color: #1e395b; }
+.rc-report h3 { margin: 14px 0 2px; font-size: 13px; color: #1e395b; }
+.rc-rep-co { margin: 0 0 8px; color: #5f6f82; }
+.rc-rep-warn { margin: 4px 0; padding: 4px 6px; color: #8a1c17; background: #fde4e1; border: 1px solid #e8a49c; }
+.rc-report table { border-collapse: collapse; }
+.rc-report .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rc-rep-sum th { text-align: left; font-weight: normal; padding: 2px 24px 2px 0; }
+.rc-rep-sum td { padding: 2px 0; min-width: 110px; }
+.rc-rep-sum tr.rc-rep-open th, .rc-rep-sum tr.rc-rep-open td,
+.rc-rep-sum tr.rc-rep-end th, .rc-rep-sum tr.rc-rep-end td { font-weight: bold; }
+.rc-rep-sum tr.rc-rep-end td { border-top: 1px solid #555; }
+.rc-rep-out { width: 100%; }
+.rc-rep-out th { text-align: left; font-weight: normal; color: #4c607a; border-bottom: 1px solid #c5ccd4; padding: 2px 6px 2px 0; }
+.rc-rep-out td { padding: 2px 6px 2px 0; }
+.rc-rep-out tfoot th, .rc-rep-out tfoot td { border-top: 1px solid #555; border-bottom: none; color: inherit; font-weight: bold; }
+.rc-rep-out tr.rc-empty td { color: #6b7785; }
+
+/* Printing: normally the Reconcile window is left out. "Print..." on the report prints ONLY the report. */
+@media print {
+  body:not(.print-rc-report) #win-reconcile { display: none !important; }
+  body.print-rc-report .window:not(#win-reconcile),
+  body.print-rc-report #win-reconcile .rc-foot { display: none !important; }
+  body.print-rc-report #win-reconcile .rc-body,
+  body.print-rc-report #win-reconcile .rc-step,
+  body.print-rc-report #win-reconcile .rc-scroll { display: block; overflow: visible; border: none; background: none; padding: 0; }
+  body.print-rc-report .rc-report { border: none; padding: 0; max-width: none; }
+}

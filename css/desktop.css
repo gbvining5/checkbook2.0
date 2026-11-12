@@ -182,3 +182,6 @@
   .task-btn { padding: 0 6px; }
   .start-menu { width: calc(100vw - 4px); }
 }
+
+/* Version, in the taskbar next to the clock (always visible) */
+.tray-version { color: rgba(255, 255, 255, .85); white-space: nowrap; }
