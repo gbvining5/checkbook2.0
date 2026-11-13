@@ -19,6 +19,7 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
    Bigger features get their **own desktop window/icon** so beginners never have to see them.
 6. **No `alert()` / `confirm()` / `prompt()`** — use `CB.dialog(title, html, buttons)`.
 7. **Change only what the task needs.** Don't reformat, rename, or "clean up" unrelated code.
+8. **Only made-up data in samples, tests and docs.** No real people, companies, addresses or account numbers (use names like ABC Co., Maple St., Anytown).
 
 ## File map (load order matters — see `index.html`)
 | File | Job | Touches screen? |
@@ -80,6 +81,8 @@ The version is the release date, `YEAR.MONTH.DAY` (e.g. `2026.11.12`; a second r
 2. Name the zip **and** the folder inside it `CheckBook-<version>` (e.g. `CheckBook-2026.11.12.zip`).
 The user sees it in the taskbar next to the clock and in Help > About.
 It is separate from the data format version (`CB.schema.VERSION`).
+3. The zip holds only project files: **no `node_modules/`, `test-results/` or `playwright-report/`**.
+   Unzip it fresh and run the tests from that copy before sending it.
 
 ## Tests — run them after EVERY change
 - `npm test` — unit tests for money, balances, migrations, safe loading (Node, ~1 second).
@@ -95,6 +98,7 @@ It is separate from the data format version (`CB.schema.VERSION`).
 - [ ] Old backups still open (if the data format changed)
 - [ ] Only files related to the task were changed
 - [ ] `CHANGELOG.md` has a line describing the change
+- [ ] `README.md` feature list updated if a feature was added or changed
 
 ## Decisions already made (don't re-litigate without asking the owner)
 - Local-only storage; no accounts/logins/cloud. Optional future: user saves an encrypted
