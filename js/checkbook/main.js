@@ -29,6 +29,8 @@ CB.main = (function () {
       case 'check': showTab('check'); if (!CB.app.editing.payment) CB.forms.resetPayment(); $('#p-payee').focus(); break;
       case 'deposit': showTab('deposit'); if (!CB.app.editing.deposit) CB.forms.resetDeposit(); $('#d-payee').focus(); break;
       case 'delete': CB.forms.deleteSelected(); break;
+      case 'void': CB.forms.voidSelected(); break;
+      case 'unvoid': CB.forms.unvoidSelected(); break;
       case 'reconcile': CB.reconcileUI.open(); break;
       case 'save': CB.files.saveBackup(); break;
       case 'open': $('#file-open').value = ''; $('#file-open').click(); break;

@@ -32,9 +32,10 @@ CB.reconcile = (function () {
     return last ? last.endingBalance : book.settings.beginningBalance;
   }
 
-  // Not-yet-reconciled transactions, in register order
+  // Not-yet-reconciled transactions, in register order. Voided checks are left out:
+  // they count as $0.00, so there is nothing to tick (and they can't be reconciled).
   function unreconciled(book) {
-    return L.sorted(book).filter(function (t) { return !isReconciled(t); });
+    return L.sorted(book).filter(function (t) { return !isReconciled(t) && !L.isVoided(t); });
   }
 
   // Keep only ids of transactions that still exist and are not reconciled (no duplicates)
@@ -172,6 +173,14 @@ CB.reconcile = (function () {
     return unreconciled(book).filter(function (t) { return ticked[t.id] && -2 * L.signed(t) === diff; });
   }
 
+  // Voided checks that would make the difference exactly 0 if they were not void and ticked
+  // (the bank paid a check that was voided here). Checks are payments, so that is -amount === difference.
+  function hintVoided(book, session) {
+    var diff = difference(book, session);
+    if (diff === 0) return [];
+    return L.sorted(book).filter(function (t) { return L.isVoided(t) && !isReconciled(t) && L.isCheck(t) && -t.amount === diff; });
+  }
+
   // Swapped digits (45 vs 54) always make a difference that divides evenly by 9.
   // Weak signal: about 1 in 9 unrelated differences also divide by 9.
   function hintTransposed(diff) {
@@ -192,6 +201,10 @@ CB.reconcile = (function () {
     hintReversed(book, session).slice(0, MAX_HINT_ITEMS).forEach(function (t) {
       out.push({ rule: 'reversed', id: t.id, text: 'Check that ' + itemLabel(t) + ' isn’t entered as a ' +
         (t.kind === 'deposit' ? 'deposit instead of a payment.' : 'payment instead of a deposit.') });
+    });
+    hintVoided(book, session).slice(0, MAX_HINT_ITEMS).forEach(function (t) {
+      out.push({ rule: 'voided', id: t.id, text: L.checkLabel(t) + ' to ' + itemLabel(t) + ' is void. If the bank paid it, ' +
+        'it was voided by mistake: click it in the register and Unvoid it.' });
     });
     if (hintTransposed(diff)) out.push({ rule: 'transposed', id: null, text: 'Two digits may be swapped (like 45 vs 54).' });
     return out;
@@ -240,9 +253,9 @@ CB.reconcile = (function () {
     L.sorted(book).forEach(function (t) {
       if (t.reconciledId === rec.id) {
         var g = t.kind === 'deposit' ? dep : pay;
-        g.count++; g.total += t.amount;
-      } else if (t.date <= rec.statementDate && !(t.reconciledId != null && order[t.reconciledId] < idx)) {
-        outstanding.push(t);   // not reconciled by this statement or an earlier one
+        g.count++; g.total += L.amountOf(t);
+      } else if (t.date <= rec.statementDate && !(t.reconciledId != null && order[t.reconciledId] < idx) && !L.isVoided(t)) {
+        outstanding.push(t);   // not reconciled by this statement or an earlier one (voided checks are not outstanding)
       }
     });
     var deleted = (rec.transactionIds || []).filter(function (id) { return !L.getTxn(book, id); }).length;
@@ -297,7 +310,7 @@ CB.reconcile = (function () {
     cleanTicks: cleanTicks, initialTicks: initialTicks, candidates: candidates, clearedTotal: clearedTotal,
     difference: difference, checkStart: checkStart, canFinish: canFinish, finish: finish,
     makeDraft: makeDraft, resume: resume, sameSession: sameSession,
-    hintUnticked: hintUnticked, hintReversed: hintReversed, hintTransposed: hintTransposed, hints: hints,
+    hintUnticked: hintUnticked, hintReversed: hintReversed, hintVoided: hintVoided, hintTransposed: hintTransposed, hints: hints,
     findReconciliation: findReconciliation, canUndo: canUndo, undoLast: undoLast, report: report,
     changeNeedsWarning: changeNeedsWarning, warningFor: warningFor, beginningBalanceWarning: beginningBalanceWarning };
 })();

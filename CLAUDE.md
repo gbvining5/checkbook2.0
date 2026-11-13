@@ -28,14 +28,14 @@ Plain HTML/CSS/JavaScript. **No build step, no framework, no server.** Open `ind
 | `js/core/money.js` | cents parsing/formatting, amount in words | no |
 | `js/core/schema.js` | data shape, `VERSION`, migrations, `validate()` | no |
 | `js/core/store.js` | load/save to localStorage safely, open backups, rescue copies, blocking saves for data it can't open or once another window has saved | no |
-| `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction), `newTxn` (the shape of a new one) — pure functions | no |
-| `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish, hints, undo, report, reconciled-item warnings | no |
+| `js/core/ledger.js` | balances, sorting, check numbers, `checkTxn` (the rules for recording a transaction), `newTxn` (the shape of a new one), void rules (`isVoided`, `amountOf`, `canVoid`, `canUnvoid`) — pure functions | no |
+| `js/core/reconcile.js` | reconcile math: opening balance, cleared total, difference, finish, hints (incl. voided checks), undo, report, reconciled-item warnings | no |
 | `js/ui/dialog.js` | message boxes (one at a time; others wait), `CB.dialog.errors()`, status bar | yes |
 | `js/ui/desktop.js` | desktop, windows (move/resize/min/max/close), taskbar | yes |
 | `js/checkbook/state.js` | `CB.app` — the open book + `commit()` | — |
 | `js/checkbook/register.js` | draws the register + balances | yes |
 | `js/checkbook/splits.js` | account-lines table under each form | yes |
-| `js/checkbook/forms.js` | Write Check / Make Deposit: validate, record, edit, delete | yes |
+| `js/checkbook/forms.js` | Write Check / Make Deposit: validate, record, edit, delete, void / unvoid checks | yes |
 | `js/checkbook/lists.js` | Accounts & Payees tab, Settings tab | yes |
 | `js/checkbook/files.js` | Save/Open backup, CSV export, New checkbook | yes |
 | `js/reconcile/reconcile.js` | the Reconcile window (screen code) | yes |
@@ -55,6 +55,10 @@ CB.app.commit('Status bar message');   // saves + redraws everything
 ```
 Calculations belong in `js/core/ledger.js` as pure functions (take a book, return a value),
 so they can be unit tested.
+
+**Voided checks** (`t.voidedAt` set) stay in the book with their original `amount` and `splits` but count as $0.00.
+For money math always use `CB.ledger.amountOf(t)` or `CB.ledger.signed(t)`, never `t.amount` directly.
+Only checks can be voided, never a reconciled one, and voiding never frees the check number.
 
 ## Changing the data format
 1. In `js/core/schema.js`: bump `VERSION` by 1.

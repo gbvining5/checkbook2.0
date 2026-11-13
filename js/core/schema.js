@@ -10,9 +10,9 @@
      3. Add a unit test that an old-version book still loads.
    Never remove a migration.
 
-   Data shape (VERSION 3):
+   Data shape (VERSION 4):
    {
-     version: 3,
+     version: 4,
      settings: { company: string, bankAccount: string, beginningBalance: cents },
      expenseAccounts: [string], incomeAccounts: [string],
      payees: [{ name, address, city }],
@@ -23,6 +23,9 @@
        number: string, date: 'YYYY-MM-DD', payee: string,
        amount: cents (positive integer), memo: string, cleared: boolean,
        reconciledId: null | string,                        // id of the reconciliation that locked it (v3)
+       voidedAt: null | ISO date-time string,              // when it was voided; null = not void (v4). Checks only.
+                                                           // A voided check keeps its amount/splits but counts as $0.00:
+                                                           // use CB.ledger.amountOf()/signed(), never t.amount, for money math.
        splits: [{ account, amount: cents, memo, payee }]   // amounts add up to `amount`
      }],
      reconciliations: [{                                   // finished statements, oldest first (v3)
@@ -38,7 +41,7 @@ var CB = window.CB = window.CB || {};
 CB.schema = (function () {
   'use strict';
 
-  var VERSION = 3;
+  var VERSION = 4;
   var KINDS = ['payment', 'deposit'];
 
   function blankBook() {
@@ -65,10 +68,10 @@ CB.schema = (function () {
     ];
     b.transactions = [
       { id: uid(), seq: 1, kind: 'payment', type: 'Check', number: '1', date: '2026-11-07', payee: 'Maple St. Car Wash',
-        amount: 15000, memo: 'Detail & Wax', cleared: false, reconciledId: null,
+        amount: 15000, memo: 'Detail & Wax', cleared: false, reconciledId: null, voidedAt: null,
         splits: [{ account: 'Maint.', amount: 15000, memo: 'Detail & Wax', payee: 'Maple St. Car Wash' }] },
       { id: uid(), seq: 2, kind: 'deposit', type: 'Deposit', number: '', date: '2026-11-07', payee: 'XYZ Corp.',
-        amount: 15000, memo: '', cleared: false, reconciledId: null,
+        amount: 15000, memo: '', cleared: false, reconciledId: null, voidedAt: null,
         splits: [{ account: 'Services', amount: 15000, memo: '', payee: 'XYZ Corp.' }] }
     ];
     return b;
@@ -101,6 +104,14 @@ CB.schema = (function () {
       if (!Array.isArray(d.reconciliations)) d.reconciliations = [];
       if (d.reconcileDraft === undefined) d.reconcileDraft = null;
       d.version = 3;
+      return d;
+    },
+    // v3 -> v4: void checks (nothing is voided yet)
+    3: function (d) {
+      (d.transactions || []).forEach(function (t) {
+        if (t && typeof t === 'object' && t.voidedAt === undefined) t.voidedAt = null;
+      });
+      d.version = 4;
       return d;
     }
   };
@@ -164,6 +175,11 @@ CB.schema = (function () {
       if (!CB.util.isIsoDate(t.date)) p.push(label + ' has a bad date.');
       if (!isCents(t.amount) || t.amount <= 0) p.push(label + ' has a bad amount.');
       if (t.reconciledId != null && !recIds[t.reconciledId]) p.push(label + ' is marked reconciled by a reconciliation that does not exist.');
+      if (t.voidedAt != null) {
+        if (typeof t.voidedAt !== 'string' || isNaN(new Date(t.voidedAt).getTime())) p.push(label + ' has a bad void date.');
+        if (t.kind !== 'payment' || t.type !== 'Check') p.push(label + ' is voided but is not a check.');
+        if (t.reconciledId != null) p.push(label + ' is both voided and reconciled.');
+      }
       if (!Array.isArray(t.splits) || !t.splits.length) { p.push(label + ' has no account lines.'); return; }
       var sum = 0, splitsOk = true;
       t.splits.forEach(function (s) {

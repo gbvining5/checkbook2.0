@@ -58,6 +58,8 @@
         <button data-cmd="deposit">Make Deposit</button>
         <hr>
         <button data-cmd="delete">Delete Selected Transaction</button>
+        <button data-cmd="void">Void Selected Check&hellip;</button>
+        <button data-cmd="unvoid">Unvoid Selected Check</button>
         <hr>
         <button data-cmd="reconcile">Reconcile&hellip;</button>
       </div>
@@ -186,6 +188,7 @@
           </fieldset>
 
           <div class="form-buttons">
+            <button type="button" class="btn js-void" id="p-void" hidden>Void Check&hellip;</button>
             <button type="submit" class="btn default js-record">Record</button>
             <button type="button" class="btn js-clear">Clear</button>
           </div>
@@ -330,6 +333,9 @@
         To split one check across several accounts, click <b>+ Add Line</b>.</li>
       <li><b>Make Deposit:</b> same idea for money coming in.</li>
       <li><b>Register:</b> click any transaction to edit it. Click its <b>Rec.</b> box to mark it <b>c</b> (cleared) when it shows on your bank statement.</li>
+      <li><b>Void a check</b> you tore up or that will never be cashed: click it in the register, then <b>Edit &gt; Void Selected Check</b>
+        (or <b>Void Check</b> on the form). It stays in the register with its number and shows <b>VOID</b>, but counts as $0.00.
+        <b>Unvoid</b> puts it back exactly as it was. A reconciled (<b>R</b>) check can&rsquo;t be voided.</li>
       <li><b>Reconcile&hellip;</b> (once a month): enter the statement&rsquo;s ending date and balance, tick every item on the statement
         until the difference is $0.00, then click <b>Finish</b>. Those items are locked and show <b>R</b> in the register.</li>
     </ol>

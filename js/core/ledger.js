@@ -8,8 +8,16 @@ var CB = window.CB = window.CB || {};
 CB.ledger = (function () {
   'use strict';
 
-  // + for deposits, - for payments
-  function signed(t) { return t.kind === 'deposit' ? t.amount : -t.amount; }
+  // A voided check stays in the register but counts as $0.00 (its own amount is kept for Unvoid)
+  function isVoided(t) { return t.voidedAt != null; }
+  function isCheck(t) { return t.kind === 'payment' && t.type === 'Check'; }
+
+  // What a transaction counts for in balances, reports and reconciling: 0 when voided.
+  // Use this (or signed), never t.amount, for money math.
+  function amountOf(t) { return isVoided(t) ? 0 : t.amount; }
+
+  // + for deposits, - for payments (0 when voided)
+  function signed(t) { return t.kind === 'deposit' ? amountOf(t) : -amountOf(t); }
 
   // Register order: by date, then by the order entered
   function sorted(book) {
@@ -85,7 +93,7 @@ CB.ledger = (function () {
   // f: { kind, type, number, date, payee, amount, memo, splits }
   function newTxn(book, f) {
     return { id: CB.util.uid(), seq: nextSeq(book), kind: f.kind, type: f.type, number: f.number, date: f.date, payee: f.payee,
-      amount: f.amount, memo: f.memo, cleared: false, reconciledId: null, splits: f.splits };
+      amount: f.amount, memo: f.memo, cleared: false, reconciledId: null, voidedAt: null, splits: f.splits };
   }
 
   function getTxn(book, id) {
@@ -123,14 +131,54 @@ CB.ledger = (function () {
     return errs;
   }
 
+  /* ---------- void (checks only) ---------- */
+  function checkLabel(t) { return t.number ? 'Check #' + t.number : 'This check'; }
+
+  // Can t be voided? -> { ok: true, cleared: bool } or { ok: false, reason: plain text }
+  // cleared: it is marked "c" (the bank paid it), so the screen must warn first.
+  function canVoid(book, t) {
+    if (!t) return { ok: false, reason: 'Click a check in the register first, then choose Void.' };
+    if (!isCheck(t)) {
+      return { ok: false, reason: 'Only checks can be voided. To remove ' + (t.kind === 'deposit' ? 'a deposit' : 'this ' + t.type + ' payment') + ', use Delete instead.' };
+    }
+    if (isVoided(t)) return { ok: false, reason: checkLabel(t) + ' is already void.' };
+    if (t.reconciledId != null) {
+      var recs = book.reconciliations || [], at = -1;
+      for (var i = 0; i < recs.length; i++) if (recs[i].id === t.reconciledId) at = i;
+      var newer = at === -1 ? 0 : recs.length - 1 - at;
+      return { ok: false, reason: checkLabel(t) + ' is reconciled (R)' +
+        (at === -1 ? '' : ' on the statement dated ' + CB.util.fmtDate(recs[at].statementDate)) + ', so it can’t be voided. ' +
+        'Undo that reconciliation first (Reconcile window, Undo Last Reconciliation)' +
+        (newer ? '. Only the most recent one can be undone, so undo the ' + (newer === 1 ? 'newer statement' : newer + ' newer statements') + ' first.' : '.') };
+    }
+    return { ok: true, cleared: !!t.cleared };
+  }
+
+  // -> { ok: true } or { ok: false, reason }
+  function canUnvoid(book, t) {
+    if (!t) return { ok: false, reason: 'Click a voided check in the register first, then choose Unvoid.' };
+    if (!isVoided(t)) return { ok: false, reason: (isCheck(t) ? checkLabel(t) : 'This transaction') + ' is not void.' };
+    return { ok: true };
+  }
+
+  // Plain-text warning for deleting a voided check (null if it isn't voided)
+  function voidDeleteWarning(t) {
+    if (!t || !isVoided(t)) return null;
+    return checkLabel(t) + ' is void. Deleting it removes it from the register completely' +
+      (t.number ? ' and frees number ' + t.number + ' so it could be used again' : '') +
+      '. Usually you keep voided checks so every check number is accounted for.';
+  }
+
   // Text used by the Find box
   function searchText(t) {
-    return [t.payee, t.memo, t.number, t.type, CB.util.fmtDate(t.date), CB.money.plain(t.amount)]
+    return [t.payee, t.memo, t.number, t.type, CB.util.fmtDate(t.date), CB.money.plain(t.amount), isVoided(t) ? 'void' : '']
       .concat((t.splits || []).map(function (s) { return s.account + ' ' + s.memo; }))
       .join(' ').toLowerCase();
   }
 
-  return { signed: signed, sorted: sorted, balances: balances, withRunningBalance: withRunningBalance,
+  return { isVoided: isVoided, isCheck: isCheck, amountOf: amountOf, canVoid: canVoid, canUnvoid: canUnvoid,
+    checkLabel: checkLabel, voidDeleteWarning: voidDeleteWarning,
+    signed: signed, sorted: sorted, balances: balances, withRunningBalance: withRunningBalance,
     nextSeq: nextSeq, nextCheckNumber: nextCheckNumber, isDuplicateCheckNumber: isDuplicateCheckNumber, newTxn: newTxn,
     accountLabel: accountLabel, numberLabel: numberLabel, findPayee: findPayee, getTxn: getTxn, searchText: searchText,
     checkTxn: checkTxn };

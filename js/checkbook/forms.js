@@ -1,6 +1,6 @@
 /* =========================================================
    CB.forms — the Write Check and Make Deposit forms:
-   fill, clear, validate, record, edit, delete.
+   fill, clear, validate, record, edit, delete, void / unvoid.
    ========================================================= */
 var CB = window.CB = window.CB || {};
 
@@ -24,6 +24,28 @@ CB.forms = (function () {
     $('.js-record', form).textContent = on ? 'Save Changes' : 'Record';
     $('.js-clear', form).textContent = on ? 'Cancel' : 'Clear';
   }
+  // Local MM/DD/YYYY of an ISO date-time ('' if unreadable)
+  function localDay(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return CB.util.fmtDate(d.getFullYear() + '-' + CB.util.pad(d.getMonth() + 1) + '-' + CB.util.pad(d.getDate()));
+  }
+
+  // Write Check form: a voided check is shown read-only (its kept amount can't drift) with an Unvoid button.
+  // The Void / Unvoid button shows only while a stored check is open. t = the open transaction, or null.
+  function setVoidView(t) {
+    var f = $('#page-check');
+    var voided = !!t && L.isVoided(t);
+    f.classList.toggle('is-void', voided);
+    $$('input, select, #p-splits button, #p-addsplit', f).forEach(function (el) { el.disabled = voided; });
+    $('.js-record', f).hidden = voided;
+    var day = voided ? localDay(t.voidedAt) : '';
+    $('.edit-banner', f).textContent = voided ? 'VOID' + (day ? ' — voided on ' + day : '') + '. Unvoid it to make changes.' : 'Editing an existing transaction';
+    var btn = $('#p-void');
+    btn.hidden = !(t && L.isCheck(t));
+    btn.textContent = voided ? 'Unvoid Check' : 'Void Check…';
+  }
+
   function clearInvalid(form) { $$('.invalid', form).forEach(function (el) { el.classList.remove('invalid'); }); }
 
   function updateNumberField() {
@@ -41,6 +63,7 @@ CB.forms = (function () {
   function resetPayment() {
     CB.app.editing.payment = null;
     var f = $('#page-check');
+    setVoidView(null);
     f.reset();
     $('#p-type').value = 'Check';
     $('#p-date').value = CB.util.today();
@@ -78,6 +101,7 @@ CB.forms = (function () {
       updateWords('p');
       splitsP.load(t.splits);
       setEditMode($('#page-check'), true);
+      setVoidView(t);
       clearInvalid($('#page-check'));
     } else {
       CB.main.showTab('deposit');
@@ -120,6 +144,10 @@ CB.forms = (function () {
     // repeats the transaction's OLD memo/payee follows the edit too (so renaming the payee updates its lines).
     var id = CB.app.editing[kind];
     var existing = id ? L.getTxn(book, id) : null;
+    if (existing && L.isVoided(existing)) {
+      CB.dialog('Void Check', esc(L.checkLabel(existing)) + ' is void. Unvoid it before changing it.');
+      return false;
+    }
     var splits = rows.map(function (r) {
       var lineMemo = r.memo && !(existing && r.memo === existing.memo) ? r.memo : memo;
       var linePayee = r.payee && !(existing && r.payee === existing.payee) ? r.payee : payee;
@@ -180,7 +208,7 @@ CB.forms = (function () {
     var book = CB.app.book;
     var t = CB.app.selectedId && L.getTxn(book, CB.app.selectedId);
     if (!t) { CB.dialog('Delete', 'Click a transaction in the register first, then choose Delete.'); return; }
-    var warning = CB.reconcile.warningFor(book, t);   // null unless it is reconciled
+    var warning = CB.reconcile.warningFor(book, t) || L.voidDeleteWarning(t);   // null unless it is reconciled or void
     CB.dialog('Delete Transaction',
       (warning ? '<div class="edit-banner">' + esc(warning) + '</div><br>' : '') +
       'Delete this transaction?<br><br><b>' + esc(CB.util.fmtDate(t.date)) + ' &nbsp; ' + esc(L.numberLabel(t)) + ' &nbsp; ' + esc(t.payee) +
@@ -196,6 +224,59 @@ CB.forms = (function () {
     });
   }
 
+  /* ---------- void / unvoid (checks only) ---------- */
+  function txnSummary(t) {
+    return esc(CB.util.fmtDate(t.date)) + ' &nbsp; ' + esc(L.numberLabel(t)) + ' &nbsp; ' + esc(t.payee) + ' &nbsp; ' + M.format(t.amount);
+  }
+
+  function voidCheck(id) {
+    var book = CB.app.book;
+    var t = id ? L.getTxn(book, id) : null;
+    var can = L.canVoid(book, t);
+    if (!can.ok) { CB.dialog('Void Check', esc(can.reason)); return; }
+    var draft = book.reconcileDraft;
+    var inDraft = !!draft && Array.isArray(draft.tickedIds) && draft.tickedIds.indexOf(t.id) !== -1;
+    CB.dialog('Void Check',
+      (can.cleared ? '<div class="edit-banner">This check is marked <b>c</b> (cleared): the bank has paid it. A check the bank has paid ' +
+        'can’t really be voided. Voiding it here makes your register disagree with the bank, and your next reconciliation won’t balance. ' +
+        'If the bank paid it, click Cancel.</div><br>' : '') +
+      'Void this check?<br><br><b>' + txnSummary(t) + '</b><br><br>' +
+      'It stays in the register with its number, date and payee, shows VOID, and counts as ' + M.format(0) + '. ' +
+      'Its amount is kept, so you can Unvoid it later.' +
+      (inDraft ? '<br><br>It is ticked in your unfinished reconciliation; voiding it removes that tick.' : '') +
+      (CB.app.editing.payment === t.id ? '<br><br>Any unsaved changes in the form are discarded.' : ''),
+      [{ label: can.cleared ? 'Void Anyway' : 'Void', value: true, primary: !can.cleared }, { label: 'Cancel', value: false, primary: can.cleared }]
+    ).then(function (ok) {
+      if (!ok) { CB.status('Nothing was changed.'); return; }
+      // things may have changed while the box was open
+      if (CB.app.book !== book || L.getTxn(book, t.id) !== t) { CB.status('Nothing was changed: that check is no longer there.'); return; }
+      var again = L.canVoid(book, t);
+      if (!again.ok) { CB.dialog('Void Check', esc(again.reason)); return; }
+      t.voidedAt = new Date().toISOString();
+      if (book.reconcileDraft && Array.isArray(book.reconcileDraft.tickedIds)) {
+        book.reconcileDraft.tickedIds = book.reconcileDraft.tickedIds.filter(function (x) { return x !== t.id; });
+      }
+      CB.app.selectedId = t.id;
+      CB.app.commit(L.checkLabel(t) + ' voided. It now counts as ' + M.format(0) + '.');
+      if (CB.app.editing.payment === t.id) loadInto(t);
+    });
+  }
+
+  function unvoidCheck(id) {
+    var book = CB.app.book;
+    var t = id ? L.getTxn(book, id) : null;
+    var can = L.canUnvoid(book, t);
+    if (!can.ok) { CB.dialog('Unvoid Check', esc(can.reason)); return; }
+    t.voidedAt = null;
+    CB.app.selectedId = t.id;
+    CB.app.commit(L.checkLabel(t) + ' unvoided. It counts as ' + M.format(t.amount) + ' again.');
+    if (CB.app.editing.payment === t.id) loadInto(t);
+  }
+
+  // Edit menu: act on the check selected in the register
+  function voidSelected() { voidCheck(CB.app.selectedId); }
+  function unvoidSelected() { unvoidCheck(CB.app.selectedId); }
+
   function refreshAccounts() {
     if (splitsP) splitsP.refreshOptions();
     if (splitsD) splitsD.refreshOptions();
@@ -210,6 +291,10 @@ CB.forms = (function () {
     $('#p-payee').addEventListener('input', function () { $('#p-address').textContent = payeeAddress(this.value); });
     $('#page-check').addEventListener('submit', function (e) { e.preventDefault(); record('payment'); });
     $('#page-check .js-clear').addEventListener('click', resetPayment);
+    $('#p-void').addEventListener('click', function () {   // the button on the form: the check open in it
+      var t = CB.app.editing.payment && L.getTxn(CB.app.book, CB.app.editing.payment);
+      if (t && L.isVoided(t)) unvoidCheck(t.id); else voidCheck(CB.app.editing.payment);
+    });
 
     $('#d-amount').addEventListener('input', function () { updateWords('d'); splitsD.syncSingle(); splitsD.update(); });
     $('#page-deposit').addEventListener('submit', function (e) { e.preventDefault(); record('deposit'); });
@@ -225,5 +310,6 @@ CB.forms = (function () {
   }
 
   return { init: init, resetPayment: resetPayment, resetDeposit: resetDeposit, loadInto: loadInto,
-    record: record, deleteSelected: deleteSelected, refreshAccounts: refreshAccounts };
+    record: record, deleteSelected: deleteSelected, voidSelected: voidSelected, unvoidSelected: unvoidSelected,
+    refreshAccounts: refreshAccounts };
 })();

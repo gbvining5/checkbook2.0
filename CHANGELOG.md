@@ -2,6 +2,11 @@
 
 Newest first. One or two lines per change — what changed and why.
 
+## 2026.11.13 — Void checks
+- Void a check (Edit menu, or Void Check on the form): it stays in the register with its number, shows VOID and counts as $0.00 everywhere. Unvoid puts it back exactly as it was.
+- Reconciled (R) checks can't be voided; cleared (c) checks warn first; deleting a voided check warns that its number is freed. Reconcile hints at a voided check the bank paid; CSV adds a "Void" column.
+- Data format version 4 (adds `voidedAt`); older data and backups upgrade automatically.
+
 ## 2026.11.12-4 — Bug fixes from review
 - Two CheckBook windows open at once no longer overwrite each other: when one saves, the other stops saving and offers Reload.
 - Saved data that can't be read is never overwritten when its rescue copy can't be made (storage full), and starting again no longer piles up identical rescue copies.

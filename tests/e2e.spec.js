@@ -203,7 +203,7 @@ test('reconcile: off by $15 until a $15 bank fee is added, then Finish locks the
   await expect(page.locator('#sb-current')).toHaveText('$9,985.00');
 
   const saved = await savedBook(page);
-  expect(saved.version).toBe(3);
+  expect(saved.version).toBe(4);
   expect(saved.reconciliations).toHaveLength(1);
   expect(saved.reconciliations[0]).toMatchObject({ statementDate: '2026-11-30', openingBalance: 1000000, endingBalance: 998500 });
   expect(saved.reconciliations[0].transactionIds).toHaveLength(3);
@@ -323,7 +323,7 @@ test('a version-2 backup file still opens (cleared ticks kept as "c")', async ({
   await expect(page.locator('#register .rec-box')).toHaveText(['c', '']);
 
   const saved = await savedBook(page);
-  expect(saved.version).toBe(3);
+  expect(saved.version).toBe(4);
   expect(saved.reconciliations).toEqual([]);
   expect(saved.reconcileDraft).toBeNull();
   expect(saved.transactions.map(t => [t.cleared, t.reconciledId])).toEqual([[true, null], [false, null]]);
@@ -678,7 +678,7 @@ test('storage full: the newer data is not replaced unless you confirm you have t
   await downloadAndContinue(page);
   await dlgButton(page, 'I Have the File, Continue').click();
   await expect(page.locator('#overlay')).toBeHidden();
-  expect(JSON.parse(await stored(page)).version).toBe(3);               // replaced only after confirming
+  expect(JSON.parse(await stored(page)).version).toBe(4);               // replaced only after confirming
 });
 
 test('damaged saved data: the app still draws, nothing is overwritten, and a rescue copy is kept', async ({ page }) => {
@@ -848,4 +848,212 @@ test('damaged saved data: starting again and again keeps just one rescue copy', 
   await loadWithStored(page, bad);
   for (let i = 0; i < 3; i++) await loadWithStored(page, bad);
   expect(await rescues(page)).toEqual([bad]);
+});
+
+/* ---------------- void checks (2026.11.13) ---------------- */
+async function editMenu(page, cmd) {
+  await page.click('#menubar .menu-title:has-text("Edit")');
+  await page.click('#menubar [data-cmd=' + cmd + ']');
+}
+const row = (page, payee) => page.locator('#register tbody', { hasText: payee });
+const txnOf = (book, payee) => book.transactions.find(t => t.payee === payee);
+
+test('void: Edit > Void asks first, shows VOID at $0.00, keeps the number, changes nothing else; Unvoid restores it exactly', async ({ page }) => {
+  const errors = await open(page);
+  await writeCheck(page, 'Gas Co', '40', 'Fuel');                       // check #2
+  await expect(page.locator('#sb-current')).toHaveText('$9,960.00');
+  const before = await savedBook(page);
+
+  await row(page, 'Gas Co').click();
+  await editMenu(page, 'void');
+  await expect(page.locator('#dlg-title')).toHaveText('Void Check');
+  await expect(page.locator('#dlg-body')).toContainText('Void this check?');
+  await expect(page.locator('#dlg-body')).toContainText('counts as $0.00');
+  await dlgButton(page, 'Cancel').click();                               // Cancel: nothing changes
+  expect(await savedBook(page)).toEqual(before);
+
+  await editMenu(page, 'void');
+  await dlgButton(page, 'Void').click();
+  await expect(page.locator('#overlay')).toBeHidden();
+  await expect(row(page, 'Gas Co').locator('td.void')).toHaveText('VOID');
+  await expect(row(page, 'Gas Co').locator('tr.r2')).toContainText('Check — VOID (was $40.00)');
+  await expect(row(page, 'Gas Co')).toContainText('2');                  // number still shown
+  await expect(row(page, 'Gas Co').locator('.rec-box')).toHaveCount(0);  // Rec. locked while void
+  await expect(page.locator('#sb-current')).toHaveText('$10,000.00');    // counts as $0.00
+  await expect(page.locator('#sb-count')).toHaveText('3 transactions');  // not deleted
+
+  const after = await savedBook(page);
+  const gas = txnOf(after, 'Gas Co');
+  expect(typeof gas.voidedAt).toBe('string');
+  expect({ ...gas, voidedAt: null }).toEqual(txnOf(before, 'Gas Co'));   // amount, number, splits kept
+  expect(after.transactions.filter(t => t.payee !== 'Gas Co')).toEqual(before.transactions.filter(t => t.payee !== 'Gas Co'));
+
+  // the form shows it read-only, with Unvoid
+  await expect(page.locator('#page-check')).toHaveClass(/is-void/);
+  await expect(page.locator('#page-check .edit-banner')).toContainText('VOID — voided on');
+  await expect(page.locator('#p-amount')).toBeDisabled();
+  await expect(page.locator('#page-check .js-record')).toBeHidden();
+  await expect(page.locator('#p-void')).toHaveText('Unvoid Check');
+
+  // the number is not offered again; Find matches "void"
+  await page.click('#page-check .js-clear');
+  await expect(page.locator('#p-number')).toHaveValue('3');
+  await page.fill('#find', 'void');
+  await expect(page.locator('#register tbody')).toHaveCount(1);
+  await page.fill('#find', '');
+
+  // still void after a reload; Unvoid puts it back exactly as it was
+  await page.reload();
+  await expect(row(page, 'Gas Co').locator('td.void')).toHaveText('VOID');
+  await row(page, 'Gas Co').click();
+  await editMenu(page, 'unvoid');
+  await expect(page.locator('#sb-current')).toHaveText('$9,960.00');
+  expect(await savedBook(page)).toEqual(before);
+  await expect(page.locator('#p-amount')).toBeEnabled();
+  await expect(page.locator('#p-void')).toHaveText('Void Check…');
+  expect(errors).toEqual([]);
+});
+
+test('void: only checks; a reconciled (R) check is refused; a cleared (c) check warns; the form button voids and unvoids', async ({ page }) => {
+  const errors = await open(page);
+  await editMenu(page, 'void');                                          // nothing selected
+  await expect(page.locator('#dlg-body')).toContainText('Click a check in the register first');
+  await page.click('#dlg-buttons button');
+
+  await row(page, 'XYZ Corp.').click();                                  // a deposit
+  await editMenu(page, 'void');
+  await expect(page.locator('#dlg-body')).toContainText('Only checks can be voided');
+  await page.click('#dlg-buttons button');
+  await expect(page.locator('#p-void')).toBeHidden();
+
+  // cleared check: warning, Cancel is the default
+  await row(page, 'Maple St.').locator('.rec-box').click();
+  await expect(page.locator('#sb-cleared')).toHaveText('$9,850.00');
+  await row(page, 'Maple St.').locator('td').first().click();
+  await expect(page.locator('#p-void')).toHaveText('Void Check…');
+  await page.click('#p-void');
+  await expect(page.locator('#dlg-body')).toContainText('marked c (cleared): the bank has paid it');
+  await expect(page.locator('#dlg-buttons .btn.default')).toHaveText('Cancel');
+  await dlgButton(page, 'Cancel').click();
+  expect(txnOf(await savedBook(page), 'Maple St. Car Wash').voidedAt).toBeNull();
+  await page.click('#p-void');
+  await dlgButton(page, 'Void Anyway').click();
+  await expect(row(page, 'Maple St.').locator('.rec-void')).toHaveText('c');   // c kept, greyed, locked
+  await expect(page.locator('#sb-cleared')).toHaveText('$10,000.00');
+  await expect(page.locator('#sb-current')).toHaveText('$10,150.00');
+  await page.click('#p-void');                                           // Unvoid Check
+  await expect(row(page, 'Maple St.').locator('.rec-box')).toHaveText('c');
+  await expect(page.locator('#sb-cleared')).toHaveText('$9,850.00');
+  expect(txnOf(await savedBook(page), 'Maple St. Car Wash')).toMatchObject({ cleared: true, voidedAt: null, amount: 15000 });
+
+  // reconciled: refused with a message to undo the reconciliation first
+  await reconcileSample(page);
+  await row(page, 'Maple St.').locator('td').first().click();
+  await editMenu(page, 'void');
+  await expect(page.locator('#dlg-body')).toContainText('Check #1 is reconciled (R) on the statement dated 11/30/2026');
+  await expect(page.locator('#dlg-body')).toContainText('Undo that reconciliation first');
+  await page.click('#dlg-buttons button');
+  expect(txnOf(await savedBook(page), 'Maple St. Car Wash').voidedAt).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test('void: CSV shows VOID and 0.00; deleting a voided check warns that its number is freed', async ({ page }) => {
+  const errors = await open(page);
+  await writeCheck(page, 'Gas Co', '40', 'Fuel');
+  await row(page, 'Gas Co').click();
+  await editMenu(page, 'void');
+  await dlgButton(page, 'Void').click();
+
+  const lines = await page.evaluate(() => CB.files.buildCsv(CB.app.book).replace(/^﻿/, '').split('\r\n').map(l => l.split(',')));
+  expect(lines[0][13]).toBe('Void');
+  const gas = lines.find(c => c[4] === 'Gas Co');
+  expect([gas[1], gas[5], gas[8], gas[10], gas[13]]).toEqual(['2', '0.00', '10000.00', '0.00', 'VOID (was 40.00)']);
+  expect(lines.find(c => c[4] === 'Maple St. Car Wash')[13]).toBe('');
+  expect(lines.every(c => c.length === 14)).toBe(true);
+
+  await page.click('.toolbar [data-cmd=delete]');
+  await expect(page.locator('#dlg-body')).toContainText('Check #2 is void. Deleting it removes it from the register completely and frees number 2');
+  await expect(page.locator('#dlg-buttons .btn.default')).toHaveText('Cancel');
+  await dlgButton(page, 'Cancel').click();
+  expect(txnOf(await savedBook(page), 'Gas Co')).toBeTruthy();
+  expect(errors).toEqual([]);
+});
+
+test('void + reconcile: a voided check is not in the tick list, and the hint says to Unvoid it if the bank paid it', async ({ page }) => {
+  const errors = await open(page);
+  await row(page, 'Maple St.').click();
+  await editMenu(page, 'void');
+  await dlgButton(page, 'Void').click();
+
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '10000');                     // the bank DID pay the $150 check
+  await expect(page.locator('#rc-pay tbody tr[data-id]')).toHaveCount(0);
+  await page.click('[data-mark=deposit][data-on="1"]');
+  await expect(page.locator('#rc-t-diff')).toHaveText('-$150.00');
+  await expect(page.locator('#rc-hints .rc-hint-voided')).toContainText('Check #1 to Maple St. Car Wash, $150.00 (11/07/2026) is void. If the bank paid it');
+  await page.click('#rc-step2 .js-rc-cancel');
+
+  await row(page, 'Maple St.').click();
+  await editMenu(page, 'unvoid');
+  await openReconcile(page);
+  await startStatement(page, '2026-11-30', '10000');
+  await expect(page.locator('#rc-pay tbody tr[data-id]')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('a version-3 backup file still opens: nothing is voided, and it is saved as version 4', async ({ page }) => {
+  const errors = await open(page);
+  const v3 = {
+    version: 3,
+    settings: { company: 'V3 Backup Co', bankAccount: '', beginningBalance: 50000 },
+    expenseAccounts: ['Maint.'], incomeAccounts: ['Sales'], payees: [],
+    transactions: [
+      { id: 'x1', seq: 1, kind: 'payment', type: 'Check', number: '7', date: '2025-05-01', payee: 'Carwash', amount: 2500, memo: '',
+        cleared: true, reconciledId: 'r1', splits: [{ account: 'Maint.', amount: 2500, memo: '', payee: 'Carwash' }] },
+      { id: 'x2', seq: 2, kind: 'payment', type: 'Check', number: '8', date: '2025-05-02', payee: 'Shell', amount: 1000, memo: '',
+        cleared: false, reconciledId: null, splits: [{ account: 'Maint.', amount: 1000, memo: '', payee: 'Shell' }] }
+    ],
+    reconciliations: [{ id: 'r1', statementDate: '2025-05-31', openingBalance: 50000, endingBalance: 47500, transactionIds: ['x1'],
+      finishedAt: '2025-06-02T10:00:00.000Z' }],
+    reconcileDraft: null
+  };
+  const file = path.join(os.tmpdir(), 'cb-v3-backup.json');
+  fs.writeFileSync(file, JSON.stringify(v3));
+  await page.setInputFiles('#file-open', file);
+  await page.click('#dlg-buttons .btn.default'); // Replace
+  await expect(page.locator('#sb-current')).toHaveText('$465.00');
+  await expect(page.locator('#register td.void')).toHaveCount(0);
+  const saved = await savedBook(page);
+  expect(saved.version).toBe(4);
+  expect(saved.transactions.map(t => [t.voidedAt, t.reconciledId])).toEqual([[null, 'r1'], [null, null]]);
+  // and the new feature works on it
+  await row(page, 'Shell').click();
+  await editMenu(page, 'void');
+  await dlgButton(page, 'Void').click();
+  await expect(page.locator('#sb-current')).toHaveText('$475.00');
+  expect(errors).toEqual([]);
+});
+
+test('two windows: a check voided in one window is not undone by the other (it stops saving)', async ({ context }) => {
+  const a = await context.newPage();
+  const errors = await open(a);
+  const b = await context.newPage();
+  await open(b);
+
+  await row(b, 'Maple St.').click();                                     // B voids the check
+  await editMenu(b, 'void');
+  await dlgButton(b, 'Void').click();
+  const voidedAt = txnOf(await savedBook(b), 'Maple St. Car Wash').voidedAt;
+  expect(typeof voidedAt).toBe('string');
+  await expect(a.locator('#dlg-title')).toHaveText('Open in Another Window');
+  await dlgButton(a, 'Not Now').click();
+
+  await writeCheck(a, 'From window A', '1', 'Fuel');                    // A's out-of-date copy (check not void) is NOT saved
+  await expect(a.locator('#dlg-title')).toHaveText('Open in Another Window');
+  const saved = await savedBook(b);
+  expect(txnOf(saved, 'Maple St. Car Wash').voidedAt).toBe(voidedAt);
+  expect(saved.transactions.map(t => t.payee)).not.toContain('From window A');
+  await dlgButton(a, 'Reload').click();
+  await expect(row(a, 'Maple St.').locator('td.void')).toHaveText('VOID');
+  expect(errors).toEqual([]);
 });

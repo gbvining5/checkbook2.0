@@ -1,6 +1,6 @@
 {
   "name": "checkbook",
-  "version": "2026.11.12-4",
+  "version": "2026.11.13",
   "private": true,
   "description": "A simple offline check register with a Windows 7 style desktop.",
   "scripts": {

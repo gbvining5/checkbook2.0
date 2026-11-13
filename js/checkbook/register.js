@@ -32,17 +32,21 @@ CB.register = (function () {
     $('#sb-count').textContent = n + ' transaction' + (n === 1 ? '' : 's');
   }
 
-  // Rec. column: blank = not cleared, "c" = cleared (click to toggle), "R" = reconciled (locked, not clickable)
+  // Rec. column: blank = not cleared, "c" = cleared (click to toggle), "R" = reconciled (locked, not clickable).
+  // A voided check keeps its mark greyed and locked, so Unvoid brings it back exactly as it was.
   function recCell(t) {
     if (t.reconciledId != null) return '<span class="rec-r" title="Reconciled">R</span>';
+    if (CB.ledger.isVoided(t)) return '<span class="rec-void" title="Void: locked until you Unvoid it">' + (t.cleared ? 'c' : '') + '</span>';
     return '<button type="button" class="rec-box" title="Cleared the bank? Click to change" aria-pressed="' + !!t.cleared + '">' +
       (t.cleared ? 'c' : '') + '</button>';
   }
 
   function rowHtml(t, balance) {
     var L = CB.ledger;
-    var amtClass = t.kind === 'deposit' ? 'pos' : 'neg';
-    var amtText = (t.kind === 'deposit' ? '+' : '-') + money(t.amount).replace('-', '');
+    var voided = L.isVoided(t);
+    var amtClass = voided ? 'void' : t.kind === 'deposit' ? 'pos' : 'neg';
+    var amtText = voided ? 'VOID' : (t.kind === 'deposit' ? '+' : '-') + money(t.amount).replace('-', '');
+    var typeText = voided ? t.type + ' — VOID (was ' + money(t.amount) + ')' : t.type;
     return '<tr class="r1">' +
         '<td>' + esc(fmtDate(t.date)) + '</td>' +
         '<td>' + esc(L.numberLabel(t)) + '</td>' +
@@ -55,7 +59,7 @@ CB.register = (function () {
         '<td></td>' +
         '<td title="' + esc(L.accountLabel(t)) + '">' + esc(L.accountLabel(t)) + '</td>' +
         '<td title="' + esc(t.memo) + '">' + esc(t.memo) + '</td>' +
-        '<td colspan="3">' + esc(t.type) + '</td>' +
+        '<td colspan="3">' + esc(typeText) + '</td>' +
       '</tr>';
   }
 
@@ -73,7 +77,8 @@ CB.register = (function () {
     rows.forEach(function (r) {
       var tb = document.createElement('tbody');
       tb.dataset.id = r.t.id;
-      if (r.t.id === CB.app.selectedId) tb.className = 'selected';
+      if (r.t.id === CB.app.selectedId) tb.classList.add('selected');
+      if (CB.ledger.isVoided(r.t)) tb.classList.add('voided');
       tb.innerHTML = rowHtml(r.t, r.balance);
       frag.appendChild(tb);
     });
@@ -101,7 +106,7 @@ CB.register = (function () {
       var t = CB.ledger.getTxn(CB.app.book, tb.dataset.id);
       if (!t) return;
       if (e.target.classList.contains('rec-box')) {
-        if (t.reconciledId != null) return;   // reconciled items stay cleared
+        if (t.reconciledId != null || CB.ledger.isVoided(t)) return;   // reconciled items stay cleared; voided ones are locked
         t.cleared = !t.cleared;
         e.target.textContent = t.cleared ? 'c' : '';
         e.target.setAttribute('aria-pressed', String(t.cleared));

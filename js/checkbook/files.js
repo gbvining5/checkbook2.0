@@ -93,17 +93,18 @@ CB.files = (function () {
 
   function buildCsv(book) {
     var lines = [['Date', 'Number', 'Kind', 'Trans Type', 'Payee / Received From', 'Amount', 'Memo', 'Rec.', 'Balance',
-      'Account', 'Line Amount', 'Line Memo', 'Line Payee'].join(',')];
-    lines.push(['', '', '', 'Beginning Balance', '', '', '', '', M.plain(book.settings.beginningBalance), '', '', '', ''].join(','));
+      'Account', 'Line Amount', 'Line Memo', 'Line Payee', 'Void'].join(',')];
+    lines.push(['', '', '', 'Beginning Balance', '', '', '', '', M.plain(book.settings.beginningBalance), '', '', '', '', ''].join(','));
     L.withRunningBalance(book).forEach(function (r) {
       var t = r.t;
+      var voided = L.isVoided(t);   // Amount and Line Amount are 0.00 (signed() is 0); the last column says VOID
       (t.splits.length ? t.splits : [{}]).forEach(function (s, i) {
         var head = i === 0
           ? [CB.util.fmtDate(t.date), L.numberLabel(t), t.kind === 'deposit' ? 'Deposit' : 'Payment', t.type, t.payee,
              M.plain(L.signed(t)), t.memo, t.reconciledId != null ? 'R' : t.cleared ? 'X' : '', M.plain(r.balance)]
           : ['', '', '', '', '', '', '', '', ''];
-        lines.push(head.concat([s.account || '', s.amount != null ? M.plain(t.kind === 'deposit' ? s.amount : -s.amount) : '',
-          s.memo || '', s.payee || '']).map(csvCell).join(','));
+        lines.push(head.concat([s.account || '', s.amount != null ? M.plain(voided ? 0 : t.kind === 'deposit' ? s.amount : -s.amount) : '',
+          s.memo || '', s.payee || '', voided && i === 0 ? 'VOID (was ' + M.plain(t.amount) + ')' : '']).map(csvCell).join(','));
       });
     });
     return '﻿' + lines.join('\r\n');

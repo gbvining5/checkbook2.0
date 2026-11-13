@@ -514,10 +514,9 @@ function v2Book() {
   };
 }
 
-test('version-2 data upgrades to version 3 and keeps cleared ticks as they were', function () {
+test('version-2 data upgrades (v3 adds reconciliation) and keeps cleared ticks as they were', function () {
   var d = CB.schema.migrate(v2Book());
-  eq(d.version, 3);
-  eq(CB.schema.VERSION, 3);
+  eq(d.version, CB.schema.VERSION);
   eq(d.reconciliations, []);
   eq(d.reconcileDraft, null);
   eq(d.transactions.map(function (t) { return [t.cleared, t.reconciledId]; }), [[true, null], [false, null]]);
@@ -529,7 +528,7 @@ test('a version-2 book in storage loads, upgrades, and the original is kept', fu
   var init = {}; init[CB.store.KEY] = JSON.stringify(v2Book());
   withFakeStorage(init, function (data) {
     var b = CB.store.load();
-    eq(b.version, 3);
+    eq(b.version, CB.schema.VERSION);
     eq(CB.store.warnings, []);
     eq(JSON.parse(data['checkbook.before-upgrade.v2']).version, 2, 'original v2 copy should be kept');
   });
@@ -787,4 +786,161 @@ test('app version is the release date (YEAR.MONTH.DAY, optional -N)', function (
 /* ---------------- safety ---------------- */
 test('esc() neutralises HTML in user text', function () {
   eq(CB.util.esc('<img src=x onerror=alert(1)>'), '&lt;img src=x onerror=alert(1)&gt;');
+});
+
+/* ---------------- void checks (data format v4) ---------------- */
+function voidBook() {
+  // t0 check #101 $150 (cleared), t1 deposit $50, t2 check #102 $25, t3 debit card $10
+  var b = bookWith([
+    { kind: 'payment', type: 'Check', number: '101', amount: 15000, date: '2026-01-10', cleared: true },
+    { kind: 'deposit', type: 'Deposit', amount: 5000, date: '2026-01-20' },
+    { kind: 'payment', type: 'Check', number: '102', amount: 2500, date: '2026-01-25' },
+    { kind: 'payment', type: 'Debit Card', amount: 1000, date: '2026-01-26' }
+  ], 100000);
+  b.transactions.forEach(function (t) { t.reconciledId = null; t.voidedAt = null; });
+  return b;
+}
+var VOID_AT = '2026-11-13T15:00:00.000Z';
+
+test('void: a voided check counts as $0.00 in current, cleared and running balances, but keeps its amount', function () {
+  var b = voidBook();
+  b.transactions[0].voidedAt = VOID_AT;
+  eq(CB.ledger.balances(b), { current: 100000 + 5000 - 2500 - 1000, cleared: 100000 });
+  eq(CB.ledger.withRunningBalance(b).map(function (r) { return r.balance; }), [100000, 105000, 102500, 101500]);
+  eq(CB.ledger.amountOf(b.transactions[0]), 0);
+  eq(b.transactions[0].amount, 15000, 'original amount kept');
+  eq(b.transactions[0].splits[0].amount, 15000, 'account lines kept');
+  eq(CB.schema.validate(b), []);
+});
+
+test('void: unvoid (voidedAt back to null) restores the balances exactly', function () {
+  var b = voidBook(), before = JSON.stringify(b);
+  b.transactions[0].voidedAt = VOID_AT;
+  eq(CB.ledger.balances(b).current, 100000 + 5000 - 2500 - 1000, 'while void');
+  b.transactions[0].voidedAt = null;
+  eq(JSON.stringify(b), before);
+  eq(CB.ledger.balances(b), { current: 100000 - 15000 + 5000 - 2500 - 1000, cleared: 85000 });
+});
+
+test('void: the check number stays taken (not offered again, still a duplicate)', function () {
+  var b = voidBook();
+  b.transactions[2].voidedAt = VOID_AT;   // #102, the highest
+  eq(CB.ledger.nextCheckNumber(b), '103');
+  ok(CB.ledger.isDuplicateCheckNumber(b, '102', null), '#102 is still in the register');
+  eq(CB.ledger.checkTxn(b, { kind: 'payment', type: 'Check', number: '102', date: '2026-02-01', payee: 'X', amount: 100,
+    splits: [{ account: 'Maint.', amount: 100 }], editingId: null }).map(function (e) { return e.field; }), ['number']);
+});
+
+test('void: only checks; not twice; a cleared check needs a warning; a plain check is OK', function () {
+  var b = voidBook(), L = CB.ledger;
+  eq(L.canVoid(b, b.transactions[2]), { ok: true, cleared: false });
+  eq(L.canVoid(b, b.transactions[0]), { ok: true, cleared: true });
+  var dep = L.canVoid(b, b.transactions[1]);
+  ok(!dep.ok && /Only checks can be voided/.test(dep.reason) && /deposit/.test(dep.reason), dep.reason);
+  var debit = L.canVoid(b, b.transactions[3]);
+  ok(!debit.ok && /Only checks/.test(debit.reason) && /Debit Card/.test(debit.reason), debit.reason);
+  ok(!L.canVoid(b, null).ok && /Click a check/.test(L.canVoid(b, null).reason));
+  b.transactions[2].voidedAt = VOID_AT;
+  ok(!L.canVoid(b, b.transactions[2]).ok && /already void/.test(L.canVoid(b, b.transactions[2]).reason));
+});
+
+test('void: a reconciled check cannot be voided; the message names the statement and newer ones to undo first', function () {
+  var b = voidBook(), L = CB.ledger;
+  b.reconciliations = [
+    { id: 'r1', statementDate: '2026-01-31', openingBalance: 100000, endingBalance: 85000, transactionIds: ['t0'], finishedAt: VOID_AT },
+    { id: 'r2', statementDate: '2026-02-28', openingBalance: 85000, endingBalance: 85000, transactionIds: [], finishedAt: VOID_AT }
+  ];
+  b.transactions[0].reconciledId = 'r1';
+  var r = L.canVoid(b, b.transactions[0]);
+  ok(!r.ok, 'refused');
+  ok(/Check #101 is reconciled/.test(r.reason) && /01\/31\/2026/.test(r.reason) && /Undo that reconciliation first/.test(r.reason), r.reason);
+  ok(/undo the newer statement first/.test(r.reason), r.reason);
+  b.reconciliations.pop();
+  ok(!/newer/.test(L.canVoid(b, b.transactions[0]).reason), 'no "newer" when it is the most recent');
+});
+
+test('unvoid: only a voided check', function () {
+  var b = voidBook(), L = CB.ledger;
+  ok(!L.canUnvoid(b, b.transactions[2]).ok && /not void/.test(L.canUnvoid(b, b.transactions[2]).reason));
+  b.transactions[2].voidedAt = VOID_AT;
+  eq(L.canUnvoid(b, b.transactions[2]), { ok: true });
+});
+
+test('void: new transactions start not voided; Find matches "void"; deleting a voided check warns', function () {
+  var b = voidBook(), L = CB.ledger;
+  eq(L.newTxn(b, { kind: 'payment', type: 'Check', number: '9', date: '2026-01-01', payee: 'X', amount: 1, memo: '', splits: [] }).voidedAt, null);
+  b.transactions[2].voidedAt = VOID_AT;
+  ok(L.searchText(b.transactions[2]).indexOf('void') !== -1);
+  ok(L.searchText(b.transactions[0]).indexOf('void') === -1);
+  ok(/Check #102 is void/.test(L.voidDeleteWarning(b.transactions[2])) && /frees number 102/.test(L.voidDeleteWarning(b.transactions[2])));
+  eq(L.voidDeleteWarning(b.transactions[0]), null);
+});
+
+test('void + reconcile: voided checks are not listed, not ticked at the start, dropped from ticks, and not outstanding', function () {
+  var b = voidBook();
+  b.transactions[0].voidedAt = VOID_AT;                         // was cleared: would have started ticked
+  b.transactions[2].voidedAt = VOID_AT;
+  var s = { statementDate: '2026-01-31', endingBalance: 105000, tickedIds: ['t0', 't1', 't2'] };
+  eq(R.initialTicks(b, '2026-01-31'), []);
+  eq(R.candidates(b, s, false).map(function (t) { return t.id; }), ['t1', 't3']);
+  eq(R.cleanTicks(b, s.tickedIds), ['t1']);
+  eq(R.clearedTotal(b, s.tickedIds), 105000);
+  eq(R.difference(b, s), 0);
+  var rec = R.finish(b, s, 'r1', VOID_AT);
+  eq(rec.transactionIds, ['t1']);
+  eq(b.transactions[0].reconciledId, null, 'a voided check is never reconciled');
+  var rep = R.report(b, 'r1');
+  eq(rep.payments, { count: 0, total: 0 });
+  eq(rep.outstanding.map(function (t) { return t.id; }), ['t3'], 'voided checks are not outstanding');
+  eq(rep.offBy, 0);
+});
+
+test('void + reconcile: hint when a voided check is exactly the difference (the bank paid it)', function () {
+  var b = voidBook();
+  b.transactions[2].voidedAt = VOID_AT;                         // check #102, $25, voided by mistake
+  var s = { statementDate: '2026-01-31', endingBalance: 100000 - 15000 + 5000 - 2500 - 1000, tickedIds: ['t0', 't1', 't3'] };
+  eq(R.difference(b, s), -2500);
+  eq(R.hintVoided(b, s).map(function (t) { return t.id; }), ['t2']);
+  var h = R.hints(b, s).filter(function (x) { return x.rule === 'voided'; });
+  eq(h.length, 1);
+  ok(/Check #102 to X/.test(h[0].text) && /is void/.test(h[0].text) && /Unvoid/.test(h[0].text), h[0].text);
+  s.endingBalance += 2500;                                      // balances: no hint
+  eq(R.hints(b, s), []);
+});
+
+test('data format v4: a version-3 book upgrades, nothing is voided, balances unchanged', function () {
+  var v3 = voidBook();
+  v3.version = 3;
+  v3.transactions.forEach(function (t) { delete t.voidedAt; });
+  var before = CB.ledger.balances(v3);
+  var d = CB.schema.migrate(JSON.parse(JSON.stringify(v3)));
+  eq(d.version, 4);
+  eq(CB.schema.VERSION, 4);
+  eq(d.transactions.map(function (t) { return t.voidedAt; }), [null, null, null, null]);
+  eq(CB.ledger.balances(d), before);
+  eq(CB.schema.validate(d), []);
+});
+
+test('data format v4: a version-3 book in storage loads, upgrades, and the original is kept', function () {
+  var v3 = voidBook();
+  v3.version = 3;
+  v3.transactions.forEach(function (t) { delete t.voidedAt; });
+  var init = {}; init[CB.store.KEY] = JSON.stringify(v3);
+  withFakeStorage(init, function (data) {
+    var b = CB.store.load();
+    eq(b.version, 4);
+    eq(CB.store.warnings, []);
+    eq(JSON.parse(data['checkbook.before-upgrade.v3']).version, 3, 'original v3 copy kept');
+  });
+});
+
+test('validate: voided must be a check, have a real date, and not be reconciled', function () {
+  var b = voidBook();
+  b.transactions[1].voidedAt = VOID_AT;                         // a deposit
+  b.transactions[2].voidedAt = 'yesterday';
+  b.reconciliations = [{ id: 'r1', statementDate: '2026-01-31', openingBalance: 100000, endingBalance: 85000, transactionIds: ['t0'], finishedAt: VOID_AT }];
+  b.transactions[0].reconciledId = 'r1';
+  b.transactions[0].voidedAt = VOID_AT;
+  var p = CB.schema.validate(b).join(' | ');
+  ok(/is voided but is not a check/.test(p) && /bad void date/.test(p) && /both voided and reconciled/.test(p), p);
 });

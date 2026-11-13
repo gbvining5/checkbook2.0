@@ -199,6 +199,10 @@ button.cap-close:hover { background: linear-gradient(#f5b9a8, #e8826a 45%, #d940
 .register .num { text-align: right; font-variant-numeric: tabular-nums; }
 .register .neg { color: #b0201b; }
 .register .pos { color: #1f6e17; }
+/* voided check: greyed, amount shows VOID, Rec. mark locked */
+.register tbody.voided td { color: #8a8a8a; }
+.register tbody.voided td.void { color: #b0201b; font-weight: bold; letter-spacing: 1px; }
+.register .rec-void { color: #a8a8a8; cursor: default; }
 .register .rec { text-align: center; }
 .register .bal-neg { color: #b0201b; font-weight: 600; }
 .empty { padding: 30px; text-align: center; color: #6b7785; }
@@ -292,6 +296,10 @@ select.listbox { height: auto; width: 100%; padding: 0; }
 
 .form-buttons, .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .form-buttons { justify-content: flex-end; }
+.form-buttons .js-void { margin-right: auto; }   /* Void / Unvoid sits apart from Record / Clear */
+#page-check.is-void .check { opacity: .7; }
+#page-check.is-void .btn:disabled { color: #8d8d8d; border-color: #adb2b5; background: #f4f4f4; box-shadow: none; }   /* same look as Reconcile's */
+#page-check.is-void .edit-banner { border-color: #d99a9a; background: linear-gradient(#fff3f3, #fcdede); color: #8a1c1c; font-weight: bold; }
 .btn-row { margin-top: 6px; }
 .btn-row.right { justify-content: flex-end; }
 
